@@ -1197,14 +1197,20 @@ function loadPlayerHistory() {
   if (totSessions) totSessions.innerText = playerHistory.length;
 }
 
-// --- 9. TEXT-TO-SPEECH (TTS) ASSISTANT ---
+// --- 9. TEXT-TO-SPEECH (TTS) GENTLE FEMALE VOICE ASSISTANT ---
 function toggleVoiceAssistant() {
   voiceAssistantEnabled = !voiceAssistantEnabled;
   localStorage.setItem("monerjui_voice_enabled", voiceAssistantEnabled ? "true" : "false");
   updateVoiceButtonUI();
 
   if (voiceAssistantEnabled) {
-    speakMessage("Voice Guide is now turned on. I will read activities and greetings for you gently.");
+    // Immediate gentle greeting when turned ON
+    speakMessage("Hello! I am your gentle voice assistant. I am here to guide you peacefully.", true);
+  } else {
+    // Immediately stop any active speech when turned OFF
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
   }
 }
 
@@ -1217,23 +1223,86 @@ function updateVoiceButtonUI() {
 }
 
 function speakHeaderGreeting() {
+  // Manual click on "Read aloud" button will speak
   if (currentUser) {
-    speakMessage(`Good morning, ${currentUser.fullName}. Small steps make a good day. Take your time, you are doing beautifully.`);
+    speakMessage(`Good morning, ${currentUser.fullName}. Small steps make a good day. Take your time, you are doing beautifully.`, true);
   } else {
-    speakMessage("Good morning. Welcome to Moner-Jui. Small steps make a good day.");
+    speakMessage("Good morning. Welcome to Moner-Jui. Small steps make a good day.", true);
   }
 }
 
-function speakMessage(text) {
-  if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
+// Gentle female voice selector helper
+function getGentleFemaleVoice() {
+  if (!('speechSynthesis' in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices || voices.length === 0) return null;
+
+  // Search for preferred gentle female English voices
+  const preferredFemaleNames = [
+    "Google UK English Female",
+    "Google US English",
+    "Samantha",
+    "Victoria",
+    "Karen",
+    "Moira",
+    "Fiona",
+    "Microsoft Zira",
+    "Microsoft Jenny",
+    "Microsoft Aria",
+    "Natural",
+    "Female"
+  ];
+
+  for (const name of preferredFemaleNames) {
+    const found = voices.find(v => v.lang.startsWith("en") && v.name.toLowerCase().includes(name.toLowerCase()));
+    if (found) return found;
+  }
+
+  // Fallback to any English female voice or first English voice
+  const femaleVoice = voices.find(v => v.lang.startsWith("en") && /female|woman|girl/i.test(v.name));
+  if (femaleVoice) return femaleVoice;
+
+  return voices.find(v => v.lang.startsWith("en")) || voices[0];
+}
+
+// Ensure voices are loaded by browser
+if ('speechSynthesis' in window) {
+  window.speechSynthesis.onvoiceschanged = () => {
+    getGentleFemaleVoice();
+  };
+}
+
+function speakMessage(text, forceSpeak = false) {
+  // STRICT RULE: Only speak if voice assistant is explicitly turned ON (or user directly clicked "Read Aloud")
+  if (!voiceAssistantEnabled && !forceSpeak) {
+    return;
+  }
+
+  if (!('speechSynthesis' in window)) {
+    return;
+  }
+
+  try {
+    window.speechSynthesis.cancel(); // Cancel any previous speech
+
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.82; // Calming, slow gentle pace for elders
-    utterance.pitch = 1.0;
+    const femaleVoice = getGentleFemaleVoice();
+    if (femaleVoice) {
+      utterance.voice = femaleVoice;
+    }
+
+    // Gentle, comforting female parameters
+    utterance.rate = 0.82;   // Gentle, unhurried, calm pace for dementia care
+    utterance.pitch = 1.15;  // Slightly warm, soft feminine pitch
+    utterance.volume = 1.0;
     utterance.lang = 'en-US';
+
     window.speechSynthesis.speak(utterance);
+  } catch (err) {
+    console.warn("Speech synthesis notice:", err);
   }
 }
+
 
 function toggleAudioFx() {
   audioEnabled = !audioEnabled;
