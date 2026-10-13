@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Moner-Jui (মনের জুঁই) | Gentle Memory Care</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Rozha+One&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <!-- Supabase JS Client (v2 CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Canvas Confetti for gentle celebrations -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+  <!-- Cloud Connection Banner / Config Notification -->
+  <div id="db-status-bar" class="status-bar hidden">
+    <div class="status-content">
+      <span class="status-dot" id="status-indicator"></span>
+      <span id="status-text">Connecting to Cloud Database...</span>
+      <button class="small-btn" onclick="openConfigModal()">Settings</button>
+    </div>
+  </div>
+
+  <div class="app-container">
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="heart-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">moner-jui</span>
+          <span class="brand-sub">মনের জুঁই • memory care</span>
+        </div>
+      </div>
+
+      <!-- Current Active User Mini Card -->
+      <div class="current-user-badge" onclick="openProfileSelector()">
+        <div class="user-avatar" id="sidebar-user-avatar">ल</div>
+        <div class="user-meta">
+          <span class="greeting-tiny">Good morning</span>
+          <strong id="sidebar-user-name">Lakshmi Devi</strong>
+          <span class="switch-hint">Tap to switch player ▾</span>
+        </div>
+      </div>
+
+      <!-- Navigation Menu -->
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="tab-home" onclick="switchTab('tab-home')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+          <span>My day</span>
+        </button>
+        <button class="nav-item" data-tab="tab-games" onclick="switchTab('tab-games')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="6"></rect><path d="M12 12h.01"></path><path d="M17 12h.01"></path><path d="M7 12h.01"></path></svg>
+          <span>Memory games</span>
+        </button>
+        <button class="nav-item" data-tab="tab-profile" onclick="switchTab('tab-profile')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          <span>My profile</span>
+        </button>
+        <button class="nav-item host-nav-pill" data-tab="tab-host" onclick="switchTab('tab-host')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+          <span>Host Dashboard 👑</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="calm-sound-btn" id="toggle-sound-btn" onclick="toggleAudioFx()">
+          <span id="sound-icon">🔊</span> Calming sound: On
+        </button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="main-content">
+      <!-- HEADER -->
+      <header class="top-header">
+        <div>
+          <div class="header-date" id="current-date-display">Wednesday, October 16</div>
+          <h1 class="header-greeting" id="main-greeting">नमस्ते, लक्ष्मीदेवी</h1>
+          <p class="header-sub-bengali" id="sub-greeting">আজকের দিনটি আপনার জন্য সুন্দর ও শান্তিময় হোক।</p>
+        </div>
+
+        <div class="header-right">
+          <div class="points-pill">
+            <span class="sparkle">✨</span>
+            <span class="points-count" id="header-points-display">420</span>
+            <span class="points-label">points</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- TAB 1: MY DAY (HOME) -->
+      <section id="tab-home" class="tab-pane active">
+        <!-- Gentle Banner matching exact reference -->
+        <div class="gentle-banner">
+          <div class="banner-text">
+            <span class="banner-sub">Your gentle plan for today</span>
+            <h2 class="banner-title">Small steps make a good day.</h2>
+            <p class="banner-note">Take your time. You're doing beautifully.</p>
+          </div>
+          <div class="banner-sun-illustration">
+            <div class="sun-orbit"></div>
+            <div class="sun-body">☀️</div>
+          </div>
+        </div>
+
+        <!-- Today's memory games card row -->
+        <div class="section-title-row">
+          <h3 class="section-heading">Today's memory games</h3>
+          <button class="link-btn" onclick="switchTab('tab-games')">See all &rarr;</button>
+        </div>
+
+        <div class="activities-grid">
+          <!-- Game 1 Card -->
+          <div class="activity-card card-peach" onclick="launchGame('match')">
+            <div class="activity-header">
+              <span class="time-tag">5 min</span>
+              <span class="check-pill" id="badge-game1">Ready to play</span>
+            </div>
+            <div class="activity-body">
+              <div class="activity-icon-box">🧩</div>
+              <div>
+                <h4 class="activity-title">Memory Match</h4>
+                <p class="activity-desc" id="status-game1">Pair calming nature & flower cards</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Game 2 Card -->
+          <div class="activity-card card-mint" onclick="launchGame('sequence')">
+            <div class="activity-header">
+              <span class="time-tag">3 min</span>
+              <span class="check-pill" id="badge-game2">Ready to play</span>
+            </div>
+            <div class="activity-body">
+              <div class="activity-icon-box">🌸</div>
+              <div>
+                <h4 class="activity-title">Remember the Order</h4>
+                <p class="activity-desc" id="status-game2">Watch gentle musical blossoms glow</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rewards Box -->
+          <div class="rewards-card">
+            <div class="medal-icon">🏅</div>
+            <div class="rewards-tag">YOUR REWARDS</div>
+            <h4 class="rewards-title" id="rewards-status-text">You did it all!</h4>
+            <p class="rewards-sub" id="rewards-points-text"><strong id="card-points-display">420</strong> points collected</p>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" id="rewards-bar-fill" style="width: 80%;"></div>
+            </div>
+            <span class="progress-hint" id="rewards-hint">80 points to your next badge</span>
+          </div>
+        </div>
+
+        <!-- Care Plan & Support Cards -->
+        <div class="care-section-grid">
+          <div class="care-card">
+            <div class="care-header">
+              <span class="care-tag">YOUR CARE PLAN</span>
+              <button class="edit-link" onclick="speakMessage('Don\'t forget your gentle morning walk and a glass of warm water.')">🔊 Read aloud</button>
+            </div>
+            <h4 class="care-title">Medication & Hydration</h4>
+            <div class="routine-item">
+              <span class="routine-icon">💧</span>
+              <div>
+                <strong>Morning Hydration</strong>
+                <p>1 glass of water after waking up</p>
+              </div>
+              <span class="done-check">✓</span>
+            </div>
+            <div class="routine-item">
+              <span class="routine-icon">🌿</span>
+              <div>
+                <strong>Gentle Morning Breathwork</strong>
+                <p>5 minutes in the garden balcony</p>
+              </div>
+              <span class="done-check">✓</span>
+            </div>
+          </div>
+
+          <div class="care-card">
+            <div class="care-header">
+              <span class="care-tag">YOUR CARE TEAM</span>
+              <span class="phone-link">📞 Contact</span>
+            </div>
+            <h4 class="care-title">Dr. Anirban Mukherjee</h4>
+            <p class="doctor-spec">Cognitive Health & Memory Specialist</p>
+            <p class="care-quote">"Kindness, daily recall, and cheerful smiles are our best medicine."</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: MEMORY GAMES HUB -->
+      <section id="tab-games" class="tab-pane">
+        <div class="games-header">
+          <h2>Dementia-Friendly Cognitive Play</h2>
+          <p>These exercises gently stimulate neural pathways for visual recognition and sequential recall.</p>
+        </div>
+
+        <div class="games-selection-container">
+          <!-- Game Card 1 -->
+          <div class="game-showcase-card">
+            <div class="game-badge">Visual Pattern Recall</div>
+            <div class="game-art">🧩 🌺 🌿 🐦</div>
+            <h3>Game 1: Memory Match</h3>
+            <p>Find the identical pairs of calm, nostalgic symbols at your own peaceful pace. No clocks or penalties.</p>
+            <div class="game-perks">
+              <span>🌱 6 Gentle Pairs</span>
+              <span>🕊️ Calming Audio</span>
+              <span>⭐ +100 Points</span>
+            </div>
+            <button class="primary-play-btn" onclick="launchGame('match')">Play Memory Match &rarr;</button>
+          </div>
+
+          <!-- Game Card 2 -->
+          <div class="game-showcase-card">
+            <div class="game-badge">Sequential Memory</div>
+            <div class="game-art">🌸 🔔 🍃 ☀️</div>
+            <h3>Game 2: Remember the Order</h3>
+            <p>Watch petals and bells light up softly in order, then tap them back in sequence.</p>
+            <div class="game-perks">
+              <span>🎵 Gentle Chimes</span>
+              <span>🧠 Progressive Levels</span>
+              <span>⭐ +100 Points</span>
+            </div>
+            <button class="primary-play-btn" onclick="launchGame('sequence')">Play Remember the Order &rarr;</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: MY PROFILE -->
+      <section id="tab-profile" class="tab-pane">
+        <div class="profile-page-wrapper">
+          <div class="profile-hero">
+            <div class="big-avatar" id="profile-big-avatar">ल</div>
+            <div class="profile-hero-info">
+              <h2 id="profile-hero-name">Lakshmi Devi</h2>
+              <p>Participant in Moner-Jui Memory Care Program</p>
+              <div class="profile-badges-row">
+                <span class="badge-pill">🌸 Peaceful Mind</span>
+                <span class="badge-pill">⭐ Daily Explorer</span>
+                <span class="badge-pill">🌼 4-Day Streak</span>
+              </div>
+            </div>
+            <button class="outline-btn" onclick="openProfileSelector()">Change Player</button>
+          </div>
+
+          <div class="stats-overview-grid">
+            <div class="stat-box">
+              <span class="stat-number" id="profile-total-points">420</span>
+              <span class="stat-name">Total Points Collected</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-number" id="profile-total-sessions">4</span>
+              <span class="stat-name">Activities Completed</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-number">98%</span>
+              <span class="stat-name">Calm Accuracy</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-number">4 Days</span>
+              <span class="stat-name">Consistent Streak</span>
+            </div>
+          </div>
+
+          <div class="profile-session-history">
+            <h3>Recent Activity Sessions</h3>
+            <div id="profile-history-list" class="history-list">
+              <div class="empty-state">Loading your journey...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: HOST DASHBOARD (FOR YOU) -->
+      <section id="tab-host" class="tab-pane">
+        <div class="host-container">
+          <div class="host-header-bar">
+            <div>
+              <span class="host-tag">ADMIN & CAREGIVER CONSOLE</span>
+              <h2>Host Live Monitoring Dashboard</h2>
+              <p>Real-time progress, completion stats, and scores from all 4 friends across the world.</p>
+            </div>
+            <div class="host-actions">
+              <button class="sync-btn" onclick="refreshHostDashboard()">🔄 Refresh Live Data</button>
+              <button class="config-btn" onclick="openConfigModal()">⚙️ Supabase Settings</button>
+            </div>
+          </div>
+
+          <!-- 4 Friends Quick Glance Cards -->
+          <div class="players-live-grid" id="host-players-grid">
+            <!-- Dynamically populated -->
+          </div>
+
+          <!-- Summary Metric Cards -->
+          <div class="host-metrics-row">
+            <div class="metric-card">
+              <span class="metric-label">Active Friends</span>
+              <strong class="metric-val" id="metric-active-count">4</strong>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Total Games Completed</span>
+              <strong class="metric-val" id="metric-total-games">0</strong>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Total Points Earned</span>
+              <strong class="metric-val" id="metric-combined-points">0</strong>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Average Accuracy</span>
+              <strong class="metric-val" id="metric-avg-acc">100%</strong>
+            </div>
+          </div>
+
+          <!-- Live Feed / Session History Table -->
+          <div class="live-table-container">
+            <div class="table-header-title">
+              <h3>Live Game Logs (Cloud Synced)</h3>
+              <span class="live-pulse">🟢 Live Feed Active</span>
+            </div>
+            <table class="styled-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Player Name</th>
+                  <th>Game</th>
+                  <th>Score / Points</th>
+                  <th>Time Spent</th>
+                  <th>Moves</th>
+                  <th>Accuracy</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="host-sessions-tbody">
+                <tr><td colspan="8" class="text-center">Fetching records from Supabase...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL: GAME 1 - MEMORY MATCH -->
+  <div id="modal-match-game" class="game-modal hidden">
+    <div class="modal-card">
+      <div class="modal-top">
+        <div>
+          <span class="game-type-chip">Visual Memory Game</span>
+          <h3>Memory Match (ফুলের সন্ধান)</h3>
+          <p class="modal-instruction">Find the matching calm pairs. Take all the time you need.</p>
+        </div>
+        <button class="close-modal-btn" onclick="closeGameModal('modal-match-game')">✕ Close</button>
+      </div>
+
+      <div class="game-stats-bar">
+        <span>Player: <strong id="match-player-label">Lakshmi Devi</strong></span>
+        <span>Moves: <strong id="match-moves-count">0</strong></span>
+        <span>Pairs Matched: <strong id="match-pairs-count">0</strong> / 6</span>
+        <span>Timer: <strong id="match-timer">00:00</strong></span>
+      </div>
+
+      <!-- 4x3 Grid (12 Cards / 6 Pairs) -->
+      <div class="card-grid" id="match-board">
+        <!-- Generated by JS -->
+      </div>
+
+      <!-- Win Banner inside modal -->
+      <div id="match-win-screen" class="win-screen hidden">
+        <div class="win-celebration">🌺 Wonderful Job! 🌺</div>
+        <p>You completed all pairs with high focus and patience.</p>
+        <div class="win-points-badge">+100 Points Earned!</div>
+        <button class="primary-play-btn" onclick="finishAndSaveGame('match')">Save & Return to My Day</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: GAME 2 - REMEMBER THE ORDER -->
+  <div id="modal-sequence-game" class="game-modal hidden">
+    <div class="modal-card">
+      <div class="modal-top">
+        <div>
+          <span class="game-type-chip">Sequential Recall Game</span>
+          <h3>Remember the Order (স্মৃতি ধারা)</h3>
+          <p class="modal-instruction" id="seq-instruction">Watch the glowing blossoms, then repeat the pattern.</p>
+        </div>
+        <button class="close-modal-btn" onclick="closeGameModal('modal-sequence-game')">✕ Close</button>
+      </div>
+
+      <div class="game-stats-bar">
+        <span>Player: <strong id="seq-player-label">Lakshmi Devi</strong></span>
+        <span>Current Round: <strong id="seq-round-count">1</strong> / 4</span>
+        <span>Timer: <strong id="seq-timer">00:00</strong></span>
+      </div>
+
+      <!-- 4 Gentle Bells/Blossoms -->
+      <div class="sequence-pads-container">
+        <button class="seq-pad pad-rose" data-idx="0" onclick="handleSeqPadClick(0)">
+          <span class="pad-emoji">🌸</span>
+          <span class="pad-name">Rose</span>
+        </button>
+        <button class="seq-pad pad-marigold" data-idx="1" onclick="handleSeqPadClick(1)">
+          <span class="pad-emoji">🌼</span>
+          <span class="pad-name">Marigold</span>
+        </button>
+        <button class="seq-pad pad-jasmine" data-idx="2" onclick="handleSeqPadClick(2)">
+          <span class="pad-emoji">🤍</span>
+          <span class="pad-name">Jasmine</span>
+        </button>
+        <button class="seq-pad pad-lotus" data-idx="3" onclick="handleSeqPadClick(3)">
+          <span class="pad-emoji">🪷</span>
+          <span class="pad-name">Lotus</span>
+        </button>
+      </div>
+
+      <div class="seq-controls">
+        <button class="primary-play-btn" id="start-seq-btn" onclick="startSequenceGame()">Start Gentle Round</button>
+      </div>
+
+      <!-- Win Banner inside modal -->
+      <div id="seq-win-screen" class="win-screen hidden">
+        <div class="win-celebration">✨ Splendid Focus! ✨</div>
+        <p>You followed each pattern with wonderful calm and attention.</p>
+        <div class="win-points-badge">+100 Points Earned!</div>
+        <button class="primary-play-btn" onclick="finishAndSaveGame('sequence')">Save & Return to My Day</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: PROFILE SELECTOR (FOR YOUR 4 FRIENDS) -->
+  <div id="modal-select-profile" class="game-modal hidden">
+    <div class="modal-card small-modal">
+      <div class="modal-top">
+        <h3>Who is playing today?</h3>
+        <button class="close-modal-btn" onclick="closeProfileSelector()">✕</button>
+      </div>
+      <p class="modal-instruction">Select your name to load your personal memory garden:</p>
+      
+      <div class="friends-picker-list" id="picker-list">
+        <!-- 4 Profiles populated dynamically -->
+      </div>
+
+      <div class="custom-profile-input-box">
+        <label>Or enter a new name:</label>
+        <div class="input-inline">
+          <input type="text" id="custom-name-input" placeholder="e.g. Rahul Sen" maxlength="25">
+          <button class="primary-play-btn" onclick="chooseCustomPlayer()">Join</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: SUPABASE CONFIGURATION -->
+  <div id="modal-config" class="game-modal hidden">
+    <div class="modal-card small-modal">
+      <div class="modal-top">
+        <h3>Supabase Cloud Connection</h3>
+        <button class="close-modal-btn" onclick="closeConfigModal()">✕</button>
+      </div>
+      <p class="modal-instruction">Enter your project credentials from your Supabase dashboard (Project Settings &rarr; API):</p>
+      
+      <div class="form-group">
+        <label>Project URL:</label>
+        <input type="text" id="cfg-supabase-url" placeholder="https://xyzcompany.supabase.co">
+      </div>
+      <div class="form-group">
+        <label>Anon Public Key:</label>
+        <textarea id="cfg-supabase-key" rows="3" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."></textarea>
+      </div>
+      <p class="config-help">💡 <em>Note: If you leave these empty, the app will run locally and store data in your browser's local memory.</em></p>
+      <div class="modal-buttons">
+        <button class="primary-play-btn" onclick="saveSupabaseConfig()">Connect Database</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
