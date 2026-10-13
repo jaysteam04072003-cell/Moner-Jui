@@ -1,11 +1,12 @@
 /**
- * MONER-JUI - Core Application Logic
- * Clean Architecture:
- * 1. Username & Password Authentication for Players and Host
- * 2. Host Account: Abhishek Kawarkhe / Monerpass@123
- * 3. Stats & Monitoring Dashboard strictly restricted to Host only
- * 4. Automatic database sync to Supabase with local storage fallback
- * 5. Dementia-Friendly Memory Match & Remember the Order Mini-Games
+ * MONER-JUI - Complete Application Engine
+ * Features:
+ * 1. Warm pink caring aesthetic with custom brand logo.
+ * 2. Setup Patient Profile registration with full medical & emergency fields.
+ * 3. 3 Difficulty Levels in both Memory Games (Level 1 Easy, Level 2 Medium, Level 3 Mastery).
+ * 4. Text-To-Speech (TTS) Voice Guide that speaks and greets in gentle English.
+ * 5. 8 Daily Tasks with interactive checkboxes synced live to Supabase & Host.
+ * 6. Host Live Dashboard with Chart.js statistical graphs & patient analytics.
  */
 
 // --- 1. SUPABASE CLIENT & CONFIGURATION ---
@@ -14,7 +15,6 @@ const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3Mi
 
 let supabaseClient = null;
 
-// Persistent Settings
 let supabaseUrl = localStorage.getItem("monerjui_sb_url") || DEFAULT_SUPABASE_URL;
 let supabaseAnonKey = localStorage.getItem("monerjui_sb_key") || DEFAULT_SUPABASE_ANON_KEY;
 
@@ -23,12 +23,35 @@ const HOST_USERNAME = "Abhishek Kawarkhe";
 const HOST_PASSWORD = "Monerpass@123";
 
 // Current Active Session
-let currentUser = JSON.parse(localStorage.getItem("monerjui_active_user")) || null; // { username, fullName, role, points }
+let currentUser = JSON.parse(localStorage.getItem("monerjui_active_user")) || null;
 let isHostLoggedIn = localStorage.getItem("monerjui_is_host_logged_in") === "true";
 
-// Audio State (Web Audio API Synthesizer)
+// Sound & Voice Assistant Settings
 let audioEnabled = true;
+let voiceAssistantEnabled = localStorage.getItem("monerjui_voice_enabled") === "true";
 let audioCtx = null;
+
+// Default 8 Daily Tasks for Dementia Care
+const DAILY_TASKS_TEMPLATE = [
+  { index: 0, title: "Morning Hydration", desc: "Drank 1 glass of fresh morning water", icon: "💧" },
+  { index: 1, title: "Gentle Stretching", desc: "5-minute gentle breathwork or balcony walk", icon: "🌿" },
+  { index: 2, title: "Morning Medication", desc: "Taken prescribed morning supplements/medicines", icon: "💊" },
+  { index: 3, title: "Memory Game Exercise", desc: "Completed 1 round of gentle cognitive play", icon: "🧩" },
+  { index: 4, title: "Nutritious Lunch", desc: "Enjoyed a peaceful, wholesome midday meal", icon: "🥗" },
+  { index: 5, title: "Afternoon Rest", desc: "Rested quietly with calming music or silence", icon: "🕊️" },
+  { index: 6, title: "Family Connection", desc: "Exchanged smiles or had a warm call with family", icon: "📞" },
+  { index: 7, title: "Evening Hydration & Calm", desc: "Drank evening water and relaxed before dinner", icon: "🌙" }
+];
+
+let currentPatientTasks = [];
+
+// Selected Game Levels (Default Level 1)
+let selectedMatchLevel = 1; // 1: 4 pairs, 2: 6 pairs, 3: 8 pairs
+let selectedSeqLevel = 1;   // 1: 3 rounds, 2: 5 rounds, 3: 7 rounds
+
+// Chart.js Instances for Host Modal
+let scoreChartInstance = null;
+let taskChartInstance = null;
 
 function getAudioContext() {
   if (!audioCtx) {
@@ -59,7 +82,7 @@ function playGentleChime(freq = 528, duration = 0.5) {
     osc.start();
     osc.stop(ctx.currentTime + duration);
   } catch (e) {
-    console.warn("Audio chime note error:", e);
+    console.warn("Audio chime error:", e);
   }
 }
 
@@ -67,6 +90,7 @@ function playGentleChime(freq = 528, duration = 0.5) {
 document.addEventListener("DOMContentLoaded", () => {
   initSupabase();
   setupDateDisplay();
+  updateVoiceButtonUI();
   checkAuthSession();
 
   // Periodic host sync every 10s if host dashboard is active
@@ -119,11 +143,12 @@ function subscribeRealtime() {
   if (!supabaseClient) return;
   try {
     supabaseClient
-      .channel('public:game_sessions')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_sessions' }, (payload) => {
-        if (isHostLoggedIn) {
-          refreshHostDashboard(true);
-        }
+      .channel('public:realtime_updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_sessions' }, () => {
+        if (isHostLoggedIn) refreshHostDashboard(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_tasks' }, () => {
+        if (isHostLoggedIn) refreshHostDashboard(true);
       })
       .subscribe();
   } catch (e) {
@@ -145,9 +170,13 @@ function checkAuthSession() {
     if (overlay) overlay.classList.add("hidden");
     if (hostNavBtn) hostNavBtn.classList.add("hidden");
     updatePlayerUI();
+    loadPatientDailyTasks();
     switchTab("tab-home");
+
+    if (voiceAssistantEnabled) {
+      speakMessage(`Welcome back, ${currentUser.fullName}. Small steps make a good day.`);
+    }
   } else {
-    // Show Login
     if (overlay) overlay.classList.remove("hidden");
     if (hostNavBtn) hostNavBtn.classList.add("hidden");
   }
@@ -170,7 +199,7 @@ function switchAuthTab(tab) {
   }
 }
 
-// 1. SIGN IN (PLAYER)
+// 1. SIGN IN
 async function submitPlayerSignIn() {
   const username = (document.getElementById("login-username-input").value || "").trim();
   const password = (document.getElementById("login-password-input").value || "").trim();
@@ -182,7 +211,6 @@ async function submitPlayerSignIn() {
 
   let user = null;
 
-  // Verify against Supabase
   if (supabaseClient) {
     try {
       const { data, error } = await supabaseClient
@@ -196,25 +224,30 @@ async function submitPlayerSignIn() {
         user = data[0];
       }
     } catch (err) {
-      console.warn("Supabase auth error:", err);
+      console.warn("Supabase auth check:", err);
     }
   }
 
-  // Fallback to local storage
   if (!user) {
     const localUsers = JSON.parse(localStorage.getItem("monerjui_registered_users") || "[]");
     user = localUsers.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
   }
 
   if (!user) {
-    alert("Invalid username or password. Please check your credentials or register a new account.");
+    alert("Invalid username or password. Please verify or register a new patient profile.");
     return;
   }
 
-  // Successful login
   currentUser = {
     username: user.username,
     fullName: user.full_name || user.fullName || user.username,
+    age: user.age || "65 yrs",
+    gender: user.gender || "Other",
+    dementiaStage: user.dementia_stage || "Early Stage (MCI)",
+    diseaseDescription: user.disease_description || "",
+    caretakerPhone: user.caretaker_phone || "",
+    doctorName: user.doctor_name || "Dr. Anirban Mukherjee",
+    doctorPhone: user.doctor_phone || "+1 (555) 018-9922",
     role: "player",
     points: user.total_points || 0
   };
@@ -227,22 +260,33 @@ async function submitPlayerSignIn() {
   document.getElementById("nav-btn-host").classList.add("hidden");
 
   updatePlayerUI();
+  loadPatientDailyTasks();
   switchTab("tab-home");
   playGentleChime(528, 0.4);
+
+  if (voiceAssistantEnabled) {
+    speakMessage(`Welcome back, ${currentUser.fullName}.`);
+  }
 }
 
-// 2. NEW REGISTRATION (PLAYER)
+// 2. PATIENT REGISTRATION
 async function submitPlayerRegistration() {
   const fullName = (document.getElementById("reg-fullname-input").value || "").trim();
   const username = (document.getElementById("reg-username-input").value || "").trim();
   const password = (document.getElementById("reg-password-input").value || "").trim();
+  const age = document.getElementById("reg-age-input").value;
+  const gender = document.getElementById("reg-gender-input").value;
+  const stage = document.getElementById("reg-stage-input").value;
+  const desc = (document.getElementById("reg-desc-input").value || "").trim();
+  const caretakerPhone = (document.getElementById("reg-caretaker-phone-input").value || "").trim();
+  const doctorName = (document.getElementById("reg-doctor-name-input").value || "Dr. Anirban Mukherjee").trim();
+  const doctorPhone = (document.getElementById("reg-doctor-phone-input").value || "+1 (555) 018-9922").trim();
 
   if (!fullName || !username || !password) {
-    alert("Please fill in all fields (Full Name, Username, and Password).");
+    alert("Please fill in Patient Full Name, Username, and Password.");
     return;
   }
 
-  // Check if username already exists in Supabase
   if (supabaseClient) {
     try {
       const { data } = await supabaseClient
@@ -259,34 +303,44 @@ async function submitPlayerRegistration() {
     }
   }
 
-  // Save new user in Supabase
-  const newUserRecord = {
+  const newPatientRecord = {
     username: username,
     password: password,
     full_name: fullName,
     role: "player",
+    age: age,
+    gender: gender,
+    dementia_stage: stage,
+    disease_description: desc,
+    caretaker_phone: caretakerPhone,
+    doctor_name: doctorName,
+    doctor_phone: doctorPhone,
     total_points: 0,
-    games_played: 0,
-    notes: "Active Participant"
+    games_played: 0
   };
 
   if (supabaseClient) {
     try {
-      await supabaseClient.from('users').insert([newUserRecord]);
+      await supabaseClient.from('users').insert([newPatientRecord]);
     } catch (err) {
       console.warn("Supabase user insert fallback:", err);
     }
   }
 
-  // Save locally
   const localUsers = JSON.parse(localStorage.getItem("monerjui_registered_users") || "[]");
-  localUsers.push(newUserRecord);
+  localUsers.push(newPatientRecord);
   localStorage.setItem("monerjui_registered_users", JSON.stringify(localUsers));
 
-  // Log in as the new user
   currentUser = {
     username: username,
     fullName: fullName,
+    age: age,
+    gender: gender,
+    dementiaStage: stage,
+    diseaseDescription: desc,
+    caretakerPhone: caretakerPhone,
+    doctorName: doctorName,
+    doctorPhone: doctorPhone,
     role: "player",
     points: 0
   };
@@ -299,11 +353,14 @@ async function submitPlayerRegistration() {
   document.getElementById("nav-btn-host").classList.add("hidden");
 
   updatePlayerUI();
+  loadPatientDailyTasks();
   switchTab("tab-home");
   playGentleChime(587, 0.4);
+
+  speakMessage(`Hello ${fullName}, welcome to your gentle memory care garden.`);
 }
 
-// 3. HOST LOGIN (Abhishek Kawarkhe / Monerpass@123)
+// 3. HOST LOGIN
 function submitHostLogin() {
   const username = (document.getElementById("host-name-input").value || "").trim();
   const password = (document.getElementById("host-pass-input").value || "").trim();
@@ -331,6 +388,7 @@ function submitHostLogin() {
   switchTab("tab-host");
   playGentleChime(659, 0.4);
   refreshHostDashboard();
+  speakMessage("Host console opened. Live patient tracking is active.");
 }
 
 function logoutSession() {
@@ -343,13 +401,104 @@ function logoutSession() {
   document.getElementById("nav-btn-host").classList.add("hidden");
 }
 
-// --- 4. UI UPDATES ---
+// --- 4. 8 DAILY TASKS SYSTEM ---
+function loadPatientDailyTasks() {
+  if (!currentUser) return;
+  const todayKey = `monerjui_tasks_${currentUser.username}_${new Date().toISOString().slice(0, 10)}`;
+  const saved = localStorage.getItem(todayKey);
+
+  if (saved) {
+    currentPatientTasks = JSON.parse(saved);
+  } else {
+    currentPatientTasks = DAILY_TASKS_TEMPLATE.map(t => ({
+      ...t,
+      completed: false
+    }));
+    localStorage.setItem(todayKey, JSON.stringify(currentPatientTasks));
+  }
+
+  renderDailyTasksUI();
+}
+
+function renderDailyTasksUI() {
+  const container = document.getElementById("daily-tasks-list");
+  if (!container) return;
+  container.innerHTML = "";
+
+  let completedCount = 0;
+
+  currentPatientTasks.forEach((task, idx) => {
+    if (task.completed) completedCount++;
+
+    const item = document.createElement("div");
+    item.className = `task-item ${task.completed ? 'completed' : ''}`;
+    item.onclick = () => toggleTaskCompletion(idx);
+    item.innerHTML = `
+      <div class="task-checkbox">${task.completed ? '✓' : ''}</div>
+      <div class="task-label-text">
+        <strong>${task.icon} ${escapeHtml(task.title)}</strong>
+        <span>${escapeHtml(task.desc)}</span>
+      </div>
+    `;
+    container.appendChild(item);
+  });
+
+  const badge = document.getElementById("tasks-progress-badge");
+  if (badge) badge.innerText = `${completedCount} / 8 Completed`;
+
+  const profileBadge = document.getElementById("profile-tasks-badge");
+  if (profileBadge) profileBadge.innerText = `Tasks: ${completedCount}/8 Done`;
+
+  const profileStat = document.getElementById("profile-tasks-stat");
+  if (profileStat) profileStat.innerText = `${completedCount}/8`;
+}
+
+async function toggleTaskCompletion(taskIdx) {
+  if (!currentUser || !currentPatientTasks[taskIdx]) return;
+
+  const task = currentPatientTasks[taskIdx];
+  task.completed = !task.completed;
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayKey = `monerjui_tasks_${currentUser.username}_${todayStr}`;
+  localStorage.setItem(todayKey, JSON.stringify(currentPatientTasks));
+
+  if (task.completed) {
+    playGentleChime(784, 0.3);
+    if (voiceAssistantEnabled) {
+      speakMessage(`Completed ${task.title}. Wonderful step!`);
+    }
+  } else {
+    playGentleChime(440, 0.15);
+  }
+
+  renderDailyTasksUI();
+
+  // Sync to Supabase daily_tasks table
+  if (supabaseClient) {
+    try {
+      await supabaseClient.from('daily_tasks').upsert([{
+        username: currentUser.username,
+        player_name: currentUser.fullName,
+        task_date: todayStr,
+        task_index: taskIdx,
+        task_title: task.title,
+        is_completed: task.completed,
+        completed_at: task.completed ? new Date().toISOString() : null
+      }], { onConflict: 'username,task_date,task_index' });
+    } catch (err) {
+      console.warn("Daily task cloud sync error:", err);
+    }
+  }
+}
+
+// --- 5. UI UPDATES ---
 function updatePlayerUI() {
   if (!currentUser) return;
 
   const initial = currentUser.fullName.charAt(0).toUpperCase();
   document.getElementById("sidebar-user-avatar").innerText = initial;
-  document.getElementById("sidebar-role-badge").innerText = "Player";
+  document.getElementById("sidebar-role-badge").innerText = "Patient";
   document.getElementById("sidebar-user-name").innerText = currentUser.fullName;
 
   document.getElementById("main-greeting").innerText = `Good morning, ${currentUser.fullName}`;
@@ -358,11 +507,23 @@ function updatePlayerUI() {
   document.getElementById("header-points-display").innerText = currentUser.points || 0;
   document.getElementById("card-points-display").innerText = currentUser.points || 0;
 
+  // Care Team & Doctor Box
+  const docName = document.getElementById("care-doctor-name-display");
+  if (docName) docName.innerText = currentUser.doctorName || "Dr. Anirban Mukherjee";
+  const docStage = document.getElementById("care-dementia-stage-display");
+  if (docStage) docStage.innerText = `${currentUser.dementiaStage || 'Early Stage (MCI)'} Care`;
+  const phoneBtn = document.getElementById("care-doctor-phone-btn");
+  if (phoneBtn) {
+    phoneBtn.innerText = `📞 ${currentUser.doctorPhone || 'Contact'}`;
+  }
+
   // Profile Tab
   const pAvatar = document.getElementById("profile-big-avatar");
   if (pAvatar) pAvatar.innerText = initial;
   const pHero = document.getElementById("profile-hero-name");
   if (pHero) pHero.innerText = currentUser.fullName;
+  const pMeta = document.getElementById("profile-meta-line");
+  if (pMeta) pMeta.innerText = `Age: ${currentUser.age || '65 yrs'} • ${currentUser.dementiaStage || 'Early Stage (MCI)'}`;
   const pPts = document.getElementById("profile-total-points");
   if (pPts) pPts.innerText = currentUser.points || 0;
 
@@ -375,11 +536,10 @@ function updateHostUI() {
   document.getElementById("sidebar-user-name").innerText = HOST_USERNAME;
 
   document.getElementById("main-greeting").innerText = `Welcome, Host Abhishek Kawarkhe`;
-  document.getElementById("sub-greeting").innerText = "Live caregiver monitoring and participant statistics.";
+  document.getElementById("sub-greeting").innerText = "Real-time patient monitoring, medical summaries, and statistical graphs.";
 }
 
 function switchTab(tabId) {
-  // If player tries to access host tab directly, block it
   if (tabId === "tab-host" && !isHostLoggedIn) {
     alert("Access Denied: The Host Dashboard is restricted to Host Abhishek Kawarkhe.");
     return;
@@ -402,11 +562,30 @@ function switchTab(tabId) {
   }
 }
 
-// --- 5. GAME 1: MEMORY MATCH ---
-const NATURE_ICONS = ["🌺", "🌸", "🌿", "🕊️", "☀️", "🌼"];
+// --- 6. 3-LEVEL GAME SYSTEM ---
+function setGameLevel(gameType, level) {
+  playGentleChime(528, 0.2);
+  if (gameType === 'match') {
+    selectedMatchLevel = level;
+    [1, 2, 3].forEach(l => {
+      const btn = document.getElementById(`btn-match-lvl-${l}`);
+      if (btn) btn.classList.toggle("active", l === level);
+    });
+  } else if (gameType === 'seq') {
+    selectedSeqLevel = level;
+    [1, 2, 3].forEach(l => {
+      const btn = document.getElementById(`btn-seq-lvl-${l}`);
+      if (btn) btn.classList.toggle("active", l === level);
+    });
+  }
+}
+
+// GAME 1: MEMORY MATCH (3 LEVELS)
+const ALL_ICONS = ["🌺", "🌸", "🌿", "🕊️", "☀️", "🌼", "🪷", "🍃"];
 let matchCards = [];
 let flippedCards = [];
 let matchedPairs = 0;
+let targetPairs = 4; // Level 1: 4 pairs, Level 2: 6 pairs, Level 3: 8 pairs
 let matchMoves = 0;
 let matchTimerInterval = null;
 let matchSeconds = 0;
@@ -416,9 +595,15 @@ function launchGame(gameType) {
   if (gameType === 'match') {
     startMemoryMatch();
     document.getElementById("modal-match-game").classList.remove("hidden");
+    if (voiceAssistantEnabled) {
+      speakMessage(`Memory Match Level ${selectedMatchLevel}. Find all ${targetPairs} pairs gently.`);
+    }
   } else if (gameType === 'sequence') {
     prepareSequenceGame();
     document.getElementById("modal-sequence-game").classList.remove("hidden");
+    if (voiceAssistantEnabled) {
+      speakMessage(`Remember the Order Level ${selectedSeqLevel}. Watch the glowing blossoms in order.`);
+    }
   }
 }
 
@@ -432,18 +617,29 @@ function startMemoryMatch() {
   const board = document.getElementById("match-board");
   board.innerHTML = "";
   document.getElementById("match-win-screen").classList.add("hidden");
-  
+
+  // Determine pair count by level
+  if (selectedMatchLevel === 1) targetPairs = 4;
+  else if (selectedMatchLevel === 2) targetPairs = 6;
+  else targetPairs = 8;
+
+  const levelBadge = document.getElementById("match-level-badge");
+  if (levelBadge) levelBadge.innerText = `Visual Memory Game • Level ${selectedMatchLevel} (${targetPairs} Pairs)`;
+
+  document.getElementById("match-pairs-target").innerText = targetPairs;
+
   matchMoves = 0;
   matchedPairs = 0;
   matchSeconds = 0;
   flippedCards = [];
 
-  document.getElementById("match-player-label").innerText = currentUser ? currentUser.fullName : "Player";
+  document.getElementById("match-player-label").innerText = currentUser ? currentUser.fullName : "Patient";
   document.getElementById("match-moves-count").innerText = "0";
   document.getElementById("match-pairs-count").innerText = "0";
   document.getElementById("match-timer").innerText = "00:00";
 
-  matchCards = [...NATURE_ICONS, ...NATURE_ICONS].sort(() => 0.5 - Math.random());
+  const iconsSlice = ALL_ICONS.slice(0, targetPairs);
+  matchCards = [...iconsSlice, ...iconsSlice].sort(() => 0.5 - Math.random());
 
   matchCards.forEach((icon, idx) => {
     const card = document.createElement("div");
@@ -488,7 +684,7 @@ function handleCardClick(card) {
         document.getElementById("match-pairs-count").innerText = matchedPairs;
         flippedCards = [];
 
-        if (matchedPairs === NATURE_ICONS.length) {
+        if (matchedPairs === targetPairs) {
           handleMatchGameWon();
         }
       }, 400);
@@ -510,26 +706,42 @@ function handleMatchGameWon() {
   setTimeout(() => playGentleChime(880, 0.6), 250);
 
   if (window.confetti) {
-    window.confetti({ particleCount: 40, spread: 60, origin: { y: 0.7 } });
+    window.confetti({ particleCount: 45, spread: 70, origin: { y: 0.7 } });
   }
+
+  const earnedPoints = selectedMatchLevel * 100;
+  const badge = document.getElementById("match-win-points-badge");
+  if (badge) badge.innerText = `+${earnedPoints} Points Earned (Level ${selectedMatchLevel})!`;
 
   document.getElementById("match-win-screen").classList.remove("hidden");
   document.getElementById("badge-game1").innerText = "Completed today ✓";
   document.getElementById("badge-game1").classList.add("completed");
+
+  if (voiceAssistantEnabled) {
+    speakMessage(`Splendid memory! You completed Level ${selectedMatchLevel} and earned ${earnedPoints} points.`);
+  }
 }
 
-// --- 6. GAME 2: REMEMBER THE ORDER ---
+// GAME 2: REMEMBER THE ORDER (3 LEVELS)
 const BLOSSOM_FREQS = [392, 440, 523, 587];
 let sequencePattern = [];
 let userSequence = [];
 let seqRound = 1;
-const MAX_ROUNDS = 4;
+let seqMaxRounds = 3; // Level 1: 3, Level 2: 5, Level 3: 7
 let isBotPlaying = false;
 let seqTimerInterval = null;
 let seqSeconds = 0;
 
 function prepareSequenceGame() {
-  document.getElementById("seq-player-label").innerText = currentUser ? currentUser.fullName : "Player";
+  if (selectedSeqLevel === 1) seqMaxRounds = 3;
+  else if (selectedSeqLevel === 2) seqMaxRounds = 5;
+  else seqMaxRounds = 7;
+
+  const levelBadge = document.getElementById("seq-level-badge");
+  if (levelBadge) levelBadge.innerText = `Sequential Recall • Level ${selectedSeqLevel} (${seqMaxRounds} Rounds)`;
+
+  document.getElementById("seq-round-target").innerText = seqMaxRounds;
+  document.getElementById("seq-player-label").innerText = currentUser ? currentUser.fullName : "Patient";
   document.getElementById("seq-round-count").innerText = "1";
   document.getElementById("seq-timer").innerText = "00:00";
   document.getElementById("seq-win-screen").classList.add("hidden");
@@ -558,7 +770,7 @@ function startSequenceGame() {
 function nextSequenceRound() {
   userSequence = [];
   document.getElementById("seq-round-count").innerText = `${seqRound}`;
-  document.getElementById("seq-instruction").innerText = `Listen and watch blossoms gently... (Round ${seqRound}/${MAX_ROUNDS})`;
+  document.getElementById("seq-instruction").innerText = `Listen and watch blossoms gently... (Round ${seqRound}/${seqMaxRounds})`;
   sequencePattern.push(Math.floor(Math.random() * 4));
   playFullSequence();
 }
@@ -608,7 +820,7 @@ function handleSeqPadClick(padIdx) {
   }
 
   if (userSequence.length === sequencePattern.length) {
-    if (seqRound >= MAX_ROUNDS) {
+    if (seqRound >= seqMaxRounds) {
       handleSeqGameWon();
     } else {
       seqRound++;
@@ -624,22 +836,31 @@ function handleSeqGameWon() {
   setTimeout(() => playGentleChime(784, 0.6), 250);
 
   if (window.confetti) {
-    window.confetti({ particleCount: 40, spread: 60, origin: { y: 0.7 } });
+    window.confetti({ particleCount: 45, spread: 70, origin: { y: 0.7 } });
   }
+
+  const earnedPoints = selectedSeqLevel * 100;
+  const badge = document.getElementById("seq-win-points-badge");
+  if (badge) badge.innerText = `+${earnedPoints} Points Earned (Level ${selectedSeqLevel})!`;
 
   document.getElementById("seq-win-screen").classList.remove("hidden");
   document.getElementById("badge-game2").innerText = "Completed today ✓";
   document.getElementById("badge-game2").classList.add("completed");
+
+  if (voiceAssistantEnabled) {
+    speakMessage(`Brilliant focus! You finished Level ${selectedSeqLevel} and collected ${earnedPoints} points.`);
+  }
 }
 
-// --- 7. PERSISTENCE & DATA SAVING ---
+// --- 7. DATA PERSISTENCE ---
 async function finishAndSaveGame(gameType) {
   const isMatch = gameType === 'match';
   const gameId = isMatch ? "memory-match" : "remember-order";
   const gameTitle = isMatch ? "Memory Match" : "Remember the Order";
+  const gameLevel = isMatch ? selectedMatchLevel : selectedSeqLevel;
   const timeSpent = isMatch ? matchSeconds : seqSeconds;
   const moves = isMatch ? matchMoves : sequencePattern.length * 2;
-  const points = 100;
+  const points = gameLevel * 100;
 
   if (currentUser) {
     currentUser.points = (currentUser.points || 0) + points;
@@ -649,9 +870,10 @@ async function finishAndSaveGame(gameType) {
 
   const sessionData = {
     username: currentUser ? currentUser.username : "Guest",
-    player_name: currentUser ? currentUser.fullName : "Guest Player",
+    player_name: currentUser ? currentUser.fullName : "Guest Patient",
     game_id: gameId,
     game_title: gameTitle,
+    game_level: gameLevel,
     points_earned: points,
     time_spent_seconds: timeSpent,
     total_moves: moves,
@@ -671,27 +893,23 @@ async function finishAndSaveGame(gameType) {
         }).eq('username', currentUser.username);
       }
     } catch (err) {
-      console.warn("Error inserting to Supabase:", err);
+      console.warn("Supabase insert session error:", err);
     }
   }
 
   // 2. Save locally
-  saveSessionLocally(sessionData);
+  const localHistory = JSON.parse(localStorage.getItem("monerjui_history") || "[]");
+  localHistory.unshift(sessionData);
+  localStorage.setItem("monerjui_history", JSON.stringify(localHistory));
 
   closeGameModal(isMatch ? 'modal-match-game' : 'modal-sequence-game');
   switchTab('tab-home');
   loadPlayerHistory();
 }
 
-function saveSessionLocally(session) {
-  const localHistory = JSON.parse(localStorage.getItem("monerjui_history") || "[]");
-  localHistory.unshift(session);
-  localStorage.setItem("monerjui_history", JSON.stringify(localHistory));
-}
-
-// --- 8. HOST DASHBOARD (RESTRICTED TO HOST ONLY) ---
+// --- 8. HOST DASHBOARD & STATISTICAL GRAPHS ---
 async function refreshHostDashboard(isSilent = false) {
-  if (!isHostLoggedIn) return; // Strict security check
+  if (!isHostLoggedIn) return;
 
   const tbody = document.getElementById("host-sessions-tbody");
   if (!isSilent && tbody) {
@@ -700,27 +918,24 @@ async function refreshHostDashboard(isSilent = false) {
 
   let sessions = [];
   let usersList = [];
+  let tasksList = [];
 
-  // Fetch live from Supabase
   if (supabaseClient) {
     try {
-      const [sessRes, usersRes] = await Promise.all([
+      const [sessRes, usersRes, tasksRes] = await Promise.all([
         supabaseClient.from('game_sessions').select('*').order('created_at', { ascending: false }).limit(50),
-        supabaseClient.from('users').select('*').neq('role', 'host')
+        supabaseClient.from('users').select('*').neq('role', 'host'),
+        supabaseClient.from('daily_tasks').select('*')
       ]);
 
-      if (!sessRes.error && sessRes.data) {
-        sessions = sessRes.data;
-      }
-      if (!usersRes.error && usersRes.data) {
-        usersList = usersRes.data;
-      }
+      if (!sessRes.error && sessRes.data) sessions = sessRes.data;
+      if (!usersRes.error && usersRes.data) usersList = usersRes.data;
+      if (!tasksRes.error && tasksRes.data) tasksList = tasksRes.data;
     } catch (err) {
       console.warn("Supabase dashboard fetch warning:", err);
     }
   }
 
-  // Fallbacks to local records
   if (sessions.length === 0) {
     sessions = JSON.parse(localStorage.getItem("monerjui_history") || "[]");
   }
@@ -733,7 +948,7 @@ async function refreshHostDashboard(isSilent = false) {
   if (tbody) {
     tbody.innerHTML = "";
     if (sessions.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="8" class="text-center" style="padding:24px; color:#5E7A6B;">No games played yet by registered friends. Awaiting their gentle play.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center" style="padding:24px; color:var(--text-muted);">No games completed yet by registered patients.</td></tr>`;
     } else {
       sessions.forEach(s => {
         const row = document.createElement("tr");
@@ -745,68 +960,209 @@ async function refreshHostDashboard(isSilent = false) {
           <td>${dateStr}</td>
           <td><strong>${escapeHtml(s.player_name || s.username)}</strong></td>
           <td>${escapeHtml(s.game_title)}</td>
+          <td><span class="check-pill">Level ${s.game_level || 1}</span></td>
           <td class="score-pill">+${s.points_earned} pts</td>
           <td>${timeFormatted}</td>
           <td>${s.total_moves} moves</td>
           <td>${s.accuracy_percentage}%</td>
-          <td><span class="check-pill completed">${s.status || 'completed'}</span></td>
         `;
         tbody.appendChild(row);
       });
     }
   }
 
-  // Update Summary Metrics
+  // Summary Metrics
   const activeCountEl = document.getElementById("metric-active-count");
   const totalGamesEl = document.getElementById("metric-total-games");
   const pointsEl = document.getElementById("metric-combined-points");
+  const tasksEl = document.getElementById("metric-total-tasks");
 
   if (activeCountEl) activeCountEl.innerText = usersList.length;
   if (totalGamesEl) totalGamesEl.innerText = sessions.length;
   if (pointsEl) {
-    const totalPts = sessions.reduce((sum, s) => sum + (s.points_earned || 0), 0);
-    pointsEl.innerText = totalPts;
+    pointsEl.innerText = sessions.reduce((sum, s) => sum + (s.points_earned || 0), 0);
+  }
+  if (tasksEl) {
+    const completedTasks = tasksList.filter(t => t.is_completed).length;
+    tasksEl.innerText = completedTasks;
   }
 
-  renderHostPlayerCards(usersList, sessions);
+  renderHostPlayerCards(usersList, sessions, tasksList);
 }
 
-function renderHostPlayerCards(usersList, sessions) {
+function renderHostPlayerCards(usersList, sessions, tasksList) {
   const container = document.getElementById("host-players-grid");
   if (!container) return;
   container.innerHTML = "";
 
   if (usersList.length === 0) {
-    container.innerHTML = `<div style="grid-column: 1 / -1; background:white; padding:24px; border-radius:18px; text-align:center; color:#5E7A6B; border:1px solid #E2ECE5;">No participants registered yet. When friends register with a username and password, their live cards will appear here.</div>`;
+    container.innerHTML = `<div style="grid-column: 1 / -1; background:white; padding:24px; border-radius:18px; text-align:center; color:var(--text-muted); border:1px solid var(--border-subtle);">No patients registered yet. When a patient registers, their card and analytics will appear here.</div>`;
     return;
   }
 
   usersList.forEach(user => {
     const userSessions = sessions.filter(s => (s.username === user.username) || (s.player_name === user.full_name));
     const completedCount = userSessions.length;
-    const completedToday = completedCount > 0;
     const pts = userSessions.reduce((sum, s) => sum + (s.points_earned || 0), 0);
     const initial = (user.full_name || user.username).charAt(0).toUpperCase();
 
+    // Check today's tasks
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const userTasksToday = tasksList.filter(t => t.username === user.username && t.task_date === todayStr && t.is_completed);
+
     const card = document.createElement("div");
     card.className = "friend-status-card";
+    card.onclick = () => openPatientChartsModal(user, userSessions, tasksList);
     card.innerHTML = `
       <div class="friend-card-top">
         <div class="friend-avatar">${initial}</div>
         <div class="friend-name-col">
           <strong>${escapeHtml(user.full_name || user.username)}</strong>
-          <span>@${escapeHtml(user.username)}</span>
+          <span>${escapeHtml(user.age || '65 yrs')} • ${escapeHtml(user.dementia_stage || 'Early Stage')}</span>
         </div>
       </div>
       <div class="friend-card-stats">
-        <span>Points: <strong>${pts} pts</strong></span>
-        <span>Played: <strong>${completedCount}</strong></span>
+        <span>Score: <strong>${pts} pts</strong></span>
+        <span>Tasks: <strong>${userTasksToday.length}/8 Done</strong></span>
       </div>
-      <div class="friend-badge-status" style="background:${completedToday ? '#E8F5E9' : '#FFF3E0'}; color:${completedToday ? '#2E7D32' : '#E65100'};">
-        ${completedToday ? 'Completed Today ✓' : 'Awaiting gentle play ⏳'}
+      <div class="friend-badge-status" style="background:${completedCount > 0 ? '#FFF1F5' : '#FFF9F0'}; color:${completedCount > 0 ? '#B32856' : '#C27A23'};">
+        ${completedCount > 0 ? 'Played Today ✓' : 'Awaiting activity ⏳'}
       </div>
+      <div class="click-graph-hint">📊 Click to view Statistical Graphs</div>
     `;
     container.appendChild(card);
+  });
+}
+
+// Open Patient Statistical Graphs Modal
+function openPatientChartsModal(user, userSessions, tasksList) {
+  const modal = document.getElementById("modal-patient-charts");
+  modal.classList.remove("hidden");
+
+  document.getElementById("chart-modal-patient-name").innerText = `${user.full_name || user.username}'s Progress & Graphs`;
+  document.getElementById("chart-modal-sub").innerText = `Username: @${user.username} • Registered Patient`;
+
+  // Bio card
+  const bio = document.getElementById("chart-modal-bio");
+  bio.innerHTML = `
+    <div class="patient-bio-item">
+      <strong>Age & Gender</strong>
+      <span>${user.age || '65 yrs'} (${user.gender || 'Not specified'})</span>
+    </div>
+    <div class="patient-bio-item">
+      <strong>Dementia Stage</strong>
+      <span>${user.dementia_stage || 'Early Stage (MCI)'}</span>
+    </div>
+    <div class="patient-bio-item">
+      <strong>Caregiver Phone</strong>
+      <span>${user.caretaker_phone || 'None provided'}</span>
+    </div>
+    <div class="patient-bio-item">
+      <strong>Assigned Doctor</strong>
+      <span>${user.doctor_name || 'Dr. Anirban Mukherjee'}</span>
+    </div>
+    <div class="patient-bio-item">
+      <strong>Doctor Phone</strong>
+      <span>${user.doctor_phone || '+1 (555) 018-9922'}</span>
+    </div>
+    <div class="patient-bio-item">
+      <strong>Condition Notes</strong>
+      <span>${user.disease_description || 'Active regular monitoring'}</span>
+    </div>
+  `;
+
+  // Render Chart 1: Game Scores By Level
+  renderScoresChart(userSessions);
+
+  // Render Chart 2: Daily Tasks Progress
+  renderTasksChart(user.username, tasksList);
+
+  // History list
+  const historyContainer = document.getElementById("chart-modal-history-list");
+  historyContainer.innerHTML = "";
+  if (userSessions.length === 0) {
+    historyContainer.innerHTML = `<div style="padding:14px; color:var(--text-muted); font-size:13px;">No game attempts logged yet for this patient.</div>`;
+  } else {
+    userSessions.slice(0, 5).forEach(s => {
+      const item = document.createElement("div");
+      item.className = "history-item";
+      const timeStr = new Date(s.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+      item.innerHTML = `
+        <div>
+          <strong>${escapeHtml(s.game_title)} (Level ${s.game_level || 1})</strong>
+          <p style="font-size:12px; color:var(--text-muted);">${timeStr} • ${s.time_spent_seconds}s • ${s.total_moves} moves</p>
+        </div>
+        <span class="score-pill">+${s.points_earned} pts</span>
+      `;
+      historyContainer.appendChild(item);
+    });
+  }
+}
+
+function closePatientChartsModal() {
+  document.getElementById("modal-patient-charts").classList.add("hidden");
+}
+
+function renderScoresChart(userSessions) {
+  const canvas = document.getElementById("chart-scores-canvas");
+  if (!canvas) return;
+
+  if (scoreChartInstance) scoreChartInstance.destroy();
+
+  const lvl1Points = userSessions.filter(s => (s.game_level || 1) === 1).reduce((sum, s) => sum + s.points_earned, 0);
+  const lvl2Points = userSessions.filter(s => (s.game_level || 1) === 2).reduce((sum, s) => sum + s.points_earned, 0);
+  const lvl3Points = userSessions.filter(s => (s.game_level || 1) === 3).reduce((sum, s) => sum + s.points_earned, 0);
+
+  scoreChartInstance = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: ['Level 1 (Easy)', 'Level 2 (Medium)', 'Level 3 (Mastery)'],
+      datasets: [{
+        label: 'Total Points Earned',
+        data: [lvl1Points, lvl2Points, lvl3Points],
+        backgroundColor: ['#F8B3C8', '#E65A88', '#B32856'],
+        borderRadius: 8
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: '#FCE7EE' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderTasksChart(username, tasksList) {
+  const canvas = document.getElementById("chart-tasks-canvas");
+  if (!canvas) return;
+
+  if (taskChartInstance) taskChartInstance.destroy();
+
+  const userTasks = tasksList.filter(t => t.username === username);
+  const completed = userTasks.filter(t => t.is_completed).length;
+  const pending = Math.max(0, 8 - (completed % 8));
+
+  taskChartInstance = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: ['Completed Tasks', 'Remaining Tasks'],
+      datasets: [{
+        data: [completed || 1, pending],
+        backgroundColor: ['#D94676', '#FCE7EE'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom' }
+      }
+    }
   });
 }
 
@@ -818,7 +1174,7 @@ function loadPlayerHistory() {
   const playerHistory = localHistory.filter(s => s.username === currentUser.username || s.player_name === currentUser.fullName);
 
   if (playerHistory.length === 0) {
-    container.innerHTML = `<div class="empty-state" style="padding:16px; color:#5E7A6B; font-size:14px;">No activities completed yet today. Play a memory game to record your journey!</div>`;
+    container.innerHTML = `<div class="empty-state" style="padding:16px; color:var(--text-muted); font-size:14px;">No activities completed yet today. Play a memory game to record your journey!</div>`;
     return;
   }
 
@@ -829,8 +1185,8 @@ function loadPlayerHistory() {
     const dateStr = new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     item.innerHTML = `
       <div>
-        <strong>${escapeHtml(s.game_title)}</strong>
-        <p style="font-size:12px; color:#5E7A6B;">Completed at ${dateStr} • ${s.time_spent_seconds}s</p>
+        <strong>${escapeHtml(s.game_title)} (Level ${s.game_level || 1})</strong>
+        <p style="font-size:12px; color:var(--text-muted);">Completed at ${dateStr} • ${s.time_spent_seconds}s</p>
       </div>
       <span class="score-pill">+${s.points_earned} pts</span>
     `;
@@ -841,12 +1197,30 @@ function loadPlayerHistory() {
   if (totSessions) totSessions.innerText = playerHistory.length;
 }
 
-// --- 9. HELPERS & MODALS ---
-function toggleAudioFx() {
-  audioEnabled = !audioEnabled;
-  const btn = document.getElementById("toggle-sound-btn");
+// --- 9. TEXT-TO-SPEECH (TTS) ASSISTANT ---
+function toggleVoiceAssistant() {
+  voiceAssistantEnabled = !voiceAssistantEnabled;
+  localStorage.setItem("monerjui_voice_enabled", voiceAssistantEnabled ? "true" : "false");
+  updateVoiceButtonUI();
+
+  if (voiceAssistantEnabled) {
+    speakMessage("Voice Guide is now turned on. I will read activities and greetings for you gently.");
+  }
+}
+
+function updateVoiceButtonUI() {
+  const btn = document.getElementById("toggle-voice-btn");
   if (btn) {
-    btn.innerHTML = `<span id="sound-icon">${audioEnabled ? '🔊' : '🔇'}</span> Calming Sound: ${audioEnabled ? 'On' : 'Muted'}`;
+    btn.classList.toggle("active", voiceAssistantEnabled);
+    btn.innerHTML = `<span id="voice-icon">🗣️</span> Voice Guide: ${voiceAssistantEnabled ? 'On' : 'Off'}`;
+  }
+}
+
+function speakHeaderGreeting() {
+  if (currentUser) {
+    speakMessage(`Good morning, ${currentUser.fullName}. Small steps make a good day. Take your time, you are doing beautifully.`);
+  } else {
+    speakMessage("Good morning. Welcome to Moner-Jui. Small steps make a good day.");
   }
 }
 
@@ -854,14 +1228,23 @@ function speakMessage(text) {
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.85;
+    utterance.rate = 0.82; // Calming, slow gentle pace for elders
     utterance.pitch = 1.0;
+    utterance.lang = 'en-US';
     window.speechSynthesis.speak(utterance);
-  } else {
-    alert(text);
   }
 }
 
+function toggleAudioFx() {
+  audioEnabled = !audioEnabled;
+  const btn = document.getElementById("toggle-sound-btn");
+  if (btn) {
+    btn.classList.toggle("active", audioEnabled);
+    btn.innerHTML = `<span id="sound-icon">${audioEnabled ? '🔊' : '🔇'}</span> Calming Sound: ${audioEnabled ? 'On' : 'Muted'}`;
+  }
+}
+
+// Config Modal
 function openConfigModal() {
   document.getElementById("modal-config").classList.remove("hidden");
   const urlInput = document.getElementById("cfg-supabase-url");

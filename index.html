@@ -4,12 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Moner-Jui | Gentle Memory Care</title>
+  <link rel="icon" type="image/png" href="logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <!-- Supabase JS Client (v2 CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Chart.js for Host Statistical Graphs -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Canvas Confetti for gentle celebrations -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </head>
@@ -19,23 +22,19 @@
   <div id="auth-overlay" class="auth-screen">
     <div class="auth-card">
       <div class="auth-brand">
-        <div class="heart-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-          </svg>
-        </div>
+        <img src="logo.png" alt="Moner-Jui Logo" class="auth-logo-img">
         <h2>Moner-Jui</h2>
         <p class="auth-sub">Gentle Memory Care & Cognitive Wellbeing</p>
       </div>
 
-      <!-- 3 Auth Tabs: Sign In, New Registration, Host Login -->
+      <!-- 3 Auth Tabs: Sign In, Patient Registration, Host Login -->
       <div class="auth-tabs">
         <button class="auth-tab-btn active" id="btn-tab-signin" onclick="switchAuthTab('signin')">Sign In</button>
-        <button class="auth-tab-btn" id="btn-tab-register" onclick="switchAuthTab('register')">New Registration</button>
+        <button class="auth-tab-btn" id="btn-tab-register" onclick="switchAuthTab('register')">Patient Registration</button>
         <button class="auth-tab-btn" id="btn-tab-host" onclick="switchAuthTab('host')">Host Login 👑</button>
       </div>
 
-      <!-- FORM 1: SIGN IN (PLAYER) -->
+      <!-- FORM 1: SIGN IN (PATIENT / PLAYER) -->
       <div id="auth-panel-signin" class="auth-panel active">
         <p class="auth-instruction">Welcome back! Sign in with your registered username and password:</p>
         
@@ -50,29 +49,88 @@
         </div>
 
         <button class="auth-submit-btn" onclick="submitPlayerSignIn()">Sign In & Start &rarr;</button>
-        <p class="auth-switch-note">New player? <a href="javascript:void(0)" onclick="switchAuthTab('register')">Register here</a></p>
+        <p class="auth-switch-note">New patient? <a href="javascript:void(0)" onclick="switchAuthTab('register')">Register Patient Profile here</a></p>
       </div>
 
-      <!-- FORM 2: NEW REGISTRATION -->
+      <!-- FORM 2: PATIENT REGISTRATION (MATCHING SETUP PATIENT PROFILE EXACT FIELDS) -->
       <div id="auth-panel-register" class="auth-panel">
-        <p class="auth-instruction">Register a new player account. Your data will be saved securely:</p>
-        
+        <p class="auth-instruction">Setup Patient Profile for continuous memory care & daily tracking:</p>
+
+        <!-- Basic Information -->
+        <div class="form-section-title">👤 Basic Information</div>
         <div class="form-group">
-          <label>Full Name:</label>
-          <input type="text" id="reg-fullname-input" placeholder="e.g. John Doe">
+          <label>Patient Full Name:</label>
+          <input type="text" id="reg-fullname-input" placeholder="e.g. Eleanor Vance">
         </div>
 
-        <div class="form-group">
-          <label>Create Username:</label>
-          <input type="text" id="reg-username-input" placeholder="Choose a unique username" autocomplete="username">
+        <div class="form-row-2col">
+          <div class="form-group">
+            <label>Age:</label>
+            <select id="reg-age-input">
+              <option value="55 yrs">55 yrs</option>
+              <option value="60 yrs">60 yrs</option>
+              <option value="65 yrs" selected>65 yrs</option>
+              <option value="70 yrs">70 yrs</option>
+              <option value="75 yrs">75 yrs</option>
+              <option value="80 yrs">80 yrs</option>
+              <option value="85+ yrs">85+ yrs</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Gender:</label>
+            <select id="reg-gender-input">
+              <option value="Male" selected>Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
         </div>
 
-        <div class="form-group">
-          <label>Create Password:</label>
-          <input type="password" id="reg-password-input" placeholder="Choose a password" autocomplete="new-password">
+        <div class="form-row-2col">
+          <div class="form-group">
+            <label>Create Login Username:</label>
+            <input type="text" id="reg-username-input" placeholder="e.g. eleanor65" autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label>Create Password:</label>
+            <input type="password" id="reg-password-input" placeholder="e.g. memory2026" autocomplete="new-password">
+          </div>
         </div>
 
-        <button class="auth-submit-btn" onclick="submitPlayerRegistration()">Create Account & Start &rarr;</button>
+        <!-- Medical Details -->
+        <div class="form-section-title">🏥 Medical Details</div>
+        <div class="form-group">
+          <label>Dementia Stage:</label>
+          <select id="reg-stage-input">
+            <option value="Early Stage (MCI)" selected>Early Stage (MCI)</option>
+            <option value="Mild Dementia">Mild Dementia</option>
+            <option value="Moderate Dementia">Moderate Dementia</option>
+            <option value="Advanced Care">Advanced Care</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Disease Description (Optional):</label>
+          <input type="text" id="reg-desc-input" placeholder="e.g. Mild short-term memory lapses">
+        </div>
+
+        <!-- Contact & Emergency -->
+        <div class="form-section-title">👥 Contact & Emergency</div>
+        <div class="form-group">
+          <label>Your (Caretaker) Mobile No.:</label>
+          <input type="tel" id="reg-caretaker-phone-input" placeholder="+1 (555) 019-2834">
+        </div>
+        <div class="form-row-2col">
+          <div class="form-group">
+            <label>Doctor Name:</label>
+            <input type="text" id="reg-doctor-name-input" placeholder="Dr. Anirban Mukherjee">
+          </div>
+          <div class="form-group">
+            <label>Doctor Mobile No.:</label>
+            <input type="tel" id="reg-doctor-phone-input" placeholder="+1 (555) 018-9922">
+          </div>
+        </div>
+
+        <button class="auth-submit-btn" onclick="submitPlayerRegistration()">Save Patient Profile & Start &rarr;</button>
         <p class="auth-switch-note">Already registered? <a href="javascript:void(0)" onclick="switchAuthTab('signin')">Sign In here</a></p>
       </div>
 
@@ -114,11 +172,7 @@
     <!-- LEFT SIDEBAR -->
     <aside class="sidebar">
       <div class="brand">
-        <div class="heart-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-          </svg>
-        </div>
+        <img src="logo.png" alt="Moner-Jui Logo" class="brand-logo-img">
         <div class="brand-text">
           <span class="brand-title">Moner-Jui</span>
           <span class="brand-sub">Memory Care & Wellbeing</span>
@@ -129,7 +183,7 @@
       <div class="current-user-badge" onclick="logoutSession()">
         <div class="user-avatar" id="sidebar-user-avatar">U</div>
         <div class="user-meta">
-          <span class="greeting-tiny" id="sidebar-role-badge">Player</span>
+          <span class="greeting-tiny" id="sidebar-role-badge">Patient</span>
           <strong id="sidebar-user-name">Welcome</strong>
           <span class="switch-hint">Sign Out ▾</span>
         </div>
@@ -147,7 +201,7 @@
         </button>
         <button class="nav-item" id="nav-btn-profile" data-tab="tab-profile" onclick="switchTab('tab-profile')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-          <span>My Profile</span>
+          <span>Patient Profile</span>
         </button>
         <!-- Host Dashboard Pill: Only visible and accessible by host -->
         <button class="nav-item host-nav-pill hidden" id="nav-btn-host" data-tab="tab-host" onclick="switchTab('tab-host')">
@@ -157,6 +211,11 @@
       </nav>
 
       <div class="sidebar-footer">
+        <!-- Voice Assistant Toggle -->
+        <button class="calm-sound-btn" id="toggle-voice-btn" onclick="toggleVoiceAssistant()">
+          <span id="voice-icon">🗣️</span> Voice Guide: Off
+        </button>
+        <!-- Calming Chimes Toggle -->
         <button class="calm-sound-btn" id="toggle-sound-btn" onclick="toggleAudioFx()">
           <span id="sound-icon">🔊</span> Calming Sound: On
         </button>
@@ -170,10 +229,13 @@
         <div>
           <div class="header-date" id="current-date-display">Wednesday, October 16</div>
           <h1 class="header-greeting" id="main-greeting">Good morning</h1>
-          <p class="header-sub-bengali" id="sub-greeting">May your day be peaceful, calm, and filled with gentle smiles.</p>
+          <p class="header-sub" id="sub-greeting">May your day be peaceful, calm, and filled with gentle smiles.</p>
         </div>
 
         <div class="header-right">
+          <button class="speak-btn-pill" onclick="speakHeaderGreeting()">
+            <span>🔊</span> Read aloud
+          </button>
           <div class="points-pill">
             <span class="sparkle">✨</span>
             <span class="points-count" id="header-points-display">0</span>
@@ -184,16 +246,28 @@
 
       <!-- TAB 1: MY DAY (HOME) -->
       <section id="tab-home" class="tab-pane active">
-        <!-- Gentle Banner matching exact reference -->
+        <!-- Gentle Banner -->
         <div class="gentle-banner">
           <div class="banner-text">
             <span class="banner-sub">Your gentle plan for today</span>
             <h2 class="banner-title">Small steps make a good day.</h2>
             <p class="banner-note">Take your time. You are doing beautifully.</p>
           </div>
-          <div class="banner-sun-illustration">
-            <div class="sun-orbit"></div>
-            <div class="sun-body">☀️</div>
+          <div class="banner-sun-illustration">☀️</div>
+        </div>
+
+        <!-- ================= 8 DAILY TASKS SECTION ================= -->
+        <div class="daily-tasks-container">
+          <div class="tasks-header-row">
+            <div>
+              <h3>Today's 8 Daily Gentle Tasks</h3>
+              <p style="font-size: 13px; color: var(--text-muted); margin-top:2px;">Check off each step as you complete it. Your progress is synced to your caregiver.</p>
+            </div>
+            <div class="tasks-counter-badge" id="tasks-progress-badge">0 / 8 Completed</div>
+          </div>
+
+          <div class="tasks-grid" id="daily-tasks-list">
+            <!-- 8 Tasks rendered dynamically by JavaScript -->
           </div>
         </div>
 
@@ -205,9 +279,9 @@
 
         <div class="activities-grid">
           <!-- Game 1 Card -->
-          <div class="activity-card card-peach" onclick="launchGame('match')">
+          <div class="activity-card card-blush" onclick="launchGame('match')">
             <div class="activity-header">
-              <span class="time-tag">5 min</span>
+              <span class="time-tag">3 Levels • 5 min</span>
               <span class="check-pill" id="badge-game1">Ready to play</span>
             </div>
             <div class="activity-body">
@@ -220,9 +294,9 @@
           </div>
 
           <!-- Game 2 Card -->
-          <div class="activity-card card-mint" onclick="launchGame('sequence')">
+          <div class="activity-card card-coral" onclick="launchGame('sequence')">
             <div class="activity-header">
-              <span class="time-tag">3 min</span>
+              <span class="time-tag">3 Levels • 3 min</span>
               <span class="check-pill" id="badge-game2">Ready to play</span>
             </div>
             <div class="activity-body">
@@ -252,22 +326,22 @@
           <div class="care-card">
             <div class="care-header">
               <span class="care-tag">YOUR CARE PLAN</span>
-              <button class="edit-link" onclick="speakMessage('Don\'t forget your gentle morning walk and a glass of warm water.')">🔊 Read aloud</button>
+              <button class="link-btn" onclick="speakMessage('Remember to take your gentle morning walk and drink a glass of fresh water.')">🔊 Read aloud</button>
             </div>
             <h4 class="care-title">Daily Wellness Routine</h4>
             <div class="routine-item">
               <span class="routine-icon">💧</span>
               <div>
                 <strong>Morning Hydration</strong>
-                <p>1 glass of water after waking up</p>
+                <p>1 glass of fresh water after waking up</p>
               </div>
               <span class="done-check">✓</span>
             </div>
             <div class="routine-item">
               <span class="routine-icon">🌿</span>
               <div>
-                <strong>Gentle Morning Breathwork</strong>
-                <p>5 minutes in the garden or balcony</p>
+                <strong>Balcony Breathwork</strong>
+                <p>5 minutes in the gentle morning breeze</p>
               </div>
               <span class="done-check">✓</span>
             </div>
@@ -276,10 +350,10 @@
           <div class="care-card">
             <div class="care-header">
               <span class="care-tag">YOUR CARE TEAM</span>
-              <span class="phone-link">📞 Contact</span>
+              <span class="link-btn" id="care-doctor-phone-btn">📞 Contact</span>
             </div>
-            <h4 class="care-title">Dr. Anirban Mukherjee</h4>
-            <p class="doctor-spec">Cognitive Health & Memory Specialist</p>
+            <h4 class="care-title" id="care-doctor-name-display">Dr. Anirban Mukherjee</h4>
+            <p class="doctor-spec" id="care-dementia-stage-display">Early Stage (MCI) Care</p>
             <p class="care-quote">"Kindness, daily recall, and cheerful smiles are our best medicine."</p>
           </div>
         </div>
@@ -289,7 +363,7 @@
       <section id="tab-games" class="tab-pane">
         <div class="games-header">
           <h2>Dementia-Friendly Cognitive Play</h2>
-          <p>These exercises gently stimulate neural pathways for visual recognition and sequential recall.</p>
+          <p>Choose your preferred difficulty level below. Each level gently exercises visual recognition and sequential memory.</p>
         </div>
 
         <div class="games-selection-container">
@@ -298,12 +372,18 @@
             <div class="game-badge">Visual Pattern Recall</div>
             <div class="game-art">🧩 🌺 🌿 🐦</div>
             <h3>Game 1: Memory Match</h3>
-            <p>Find the identical pairs of calm, nostalgic symbols at your own peaceful pace. No clocks or penalties.</p>
-            <div class="game-perks">
-              <span>🌱 6 Gentle Pairs</span>
-              <span>🕊️ Calming Audio</span>
-              <span>⭐ +100 Points</span>
+            <p>Find identical pairs of calming nature symbols at your own peaceful pace. No clocks or penalties.</p>
+            
+            <!-- 3 Levels Selector -->
+            <div class="game-level-selector">
+              <label>Select Difficulty Level:</label>
+              <div class="level-btn-group">
+                <button class="level-pill-btn active" id="btn-match-lvl-1" onclick="setGameLevel('match', 1)">Level 1 (4 Pairs)</button>
+                <button class="level-pill-btn" id="btn-match-lvl-2" onclick="setGameLevel('match', 2)">Level 2 (6 Pairs)</button>
+                <button class="level-pill-btn" id="btn-match-lvl-3" onclick="setGameLevel('match', 3)">Level 3 (8 Pairs)</button>
+              </div>
             </div>
+
             <button class="primary-play-btn" onclick="launchGame('match')">Play Memory Match &rarr;</button>
           </div>
 
@@ -312,28 +392,35 @@
             <div class="game-badge">Sequential Memory</div>
             <div class="game-art">🌸 🔔 🍃 ☀️</div>
             <h3>Game 2: Remember the Order</h3>
-            <p>Watch petals and bells light up softly in order, then tap them back in sequence.</p>
-            <div class="game-perks">
-              <span>🎵 Gentle Chimes</span>
-              <span>🧠 Progressive Levels</span>
-              <span>⭐ +100 Points</span>
+            <p>Watch gentle musical petals light up in order, then tap them back in sequence.</p>
+            
+            <!-- 3 Levels Selector -->
+            <div class="game-level-selector">
+              <label>Select Difficulty Level:</label>
+              <div class="level-btn-group">
+                <button class="level-pill-btn active" id="btn-seq-lvl-1" onclick="setGameLevel('seq', 1)">Level 1 (3 Rounds)</button>
+                <button class="level-pill-btn" id="btn-seq-lvl-2" onclick="setGameLevel('seq', 2)">Level 2 (5 Rounds)</button>
+                <button class="level-pill-btn" id="btn-seq-lvl-3" onclick="setGameLevel('seq', 3)">Level 3 (7 Rounds)</button>
+              </div>
             </div>
+
             <button class="primary-play-btn" onclick="launchGame('sequence')">Play Remember the Order &rarr;</button>
           </div>
         </div>
       </section>
 
-      <!-- TAB 3: MY PROFILE -->
+      <!-- TAB 3: PATIENT PROFILE -->
       <section id="tab-profile" class="tab-pane">
         <div class="profile-page-wrapper">
           <div class="profile-hero">
             <div class="big-avatar" id="profile-big-avatar">U</div>
             <div class="profile-hero-info">
-              <h2 id="profile-hero-name">User Profile</h2>
-              <p>Participant in Moner-Jui Memory Care Program</p>
+              <h2 id="profile-hero-name">Patient Profile</h2>
+              <p id="profile-meta-line">Age: 65 yrs • Early Stage (MCI)</p>
               <div class="profile-badges-row">
                 <span class="badge-pill">🌸 Peaceful Mind</span>
                 <span class="badge-pill">⭐ Daily Explorer</span>
+                <span class="badge-pill" id="profile-tasks-badge">Tasks: 0/8 Done</span>
               </div>
             </div>
             <button class="outline-btn" onclick="logoutSession()">Sign Out</button>
@@ -349,8 +436,8 @@
               <span class="stat-name">Activities Completed</span>
             </div>
             <div class="stat-box">
-              <span class="stat-number" id="profile-avg-accuracy">100%</span>
-              <span class="stat-name">Calm Accuracy</span>
+              <span class="stat-number" id="profile-tasks-stat">0/8</span>
+              <span class="stat-name">Daily Tasks Done</span>
             </div>
             <div class="stat-box">
               <span class="stat-number">Active</span>
@@ -361,20 +448,20 @@
           <div class="profile-session-history">
             <h3>My Recent Activity Sessions</h3>
             <div id="profile-history-list" class="history-list">
-              <div class="empty-state">No activities completed yet today. Play a game to record your journey!</div>
+              <div class="empty-state">No activities completed yet today. Play a memory game to record your journey!</div>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- TAB 4: HOST DASHBOARD (HOST ONLY) -->
+      <!-- TAB 4: HOST DASHBOARD (RESTRICTED TO HOST) -->
       <section id="tab-host" class="tab-pane">
         <div class="host-container">
           <div class="host-header-bar">
             <div>
               <span class="host-tag">ADMIN & CAREGIVER CONSOLE</span>
               <h2>Host Live Monitoring Dashboard</h2>
-              <p>Welcome, Host Abhishek Kawarkhe. Real-time player statistics and activity logs.</p>
+              <p>Welcome, Host Abhishek Kawarkhe. Real-time patient progress, daily task checks, and cognitive stats.</p>
             </div>
             <div class="host-actions">
               <button class="sync-btn" onclick="refreshHostDashboard()">🔄 Refresh Live Data</button>
@@ -383,7 +470,7 @@
             </div>
           </div>
 
-          <!-- Registered Players Grid -->
+          <!-- Registered Patients Grid -->
           <div class="players-live-grid" id="host-players-grid">
             <!-- Dynamically populated from registered users in database -->
           </div>
@@ -391,7 +478,7 @@
           <!-- Summary Metric Cards -->
           <div class="host-metrics-row">
             <div class="metric-card">
-              <span class="metric-label">Registered Players</span>
+              <span class="metric-label">Registered Patients</span>
               <strong class="metric-val" id="metric-active-count">0</strong>
             </div>
             <div class="metric-card">
@@ -403,8 +490,8 @@
               <strong class="metric-val" id="metric-combined-points">0</strong>
             </div>
             <div class="metric-card">
-              <span class="metric-label">Average Accuracy</span>
-              <strong class="metric-val" id="metric-avg-acc">100%</strong>
+              <span class="metric-label">Overall Tasks Completed</span>
+              <strong class="metric-val" id="metric-total-tasks">0</strong>
             </div>
           </div>
 
@@ -418,13 +505,13 @@
               <thead>
                 <tr>
                   <th>Time</th>
-                  <th>Player Name</th>
+                  <th>Patient Name</th>
                   <th>Game</th>
+                  <th>Level</th>
                   <th>Score / Points</th>
                   <th>Time Spent</th>
                   <th>Moves</th>
                   <th>Accuracy</th>
-                  <th>Status</th>
                 </tr>
               </thead>
               <tbody id="host-sessions-tbody">
@@ -437,12 +524,55 @@
     </main>
   </div>
 
+  <!-- ================= MODAL: PATIENT PROGRESS GRAPHS (FOR HOST) ================= -->
+  <div id="modal-patient-charts" class="game-modal hidden">
+    <div class="modal-card patient-modal-card">
+      <div class="modal-top">
+        <div>
+          <span class="game-type-chip">Statistical Progress Analytics</span>
+          <h3 id="chart-modal-patient-name">Patient Progress & Analytics</h3>
+          <p class="modal-instruction" id="chart-modal-sub">Detailed cognitive numbers and completion breakdown</p>
+        </div>
+        <button class="close-modal-btn" onclick="closePatientChartsModal()">✕ Close</button>
+      </div>
+
+      <!-- Medical & Contact Bio Card -->
+      <div class="patient-bio-summary" id="chart-modal-bio">
+        <!-- Dynamically filled -->
+      </div>
+
+      <!-- 2 Statistical Graphs (Chart.js) -->
+      <div class="charts-row-container">
+        <div class="chart-box">
+          <h4>Game Scores by Level (Points)</h4>
+          <div class="chart-canvas-wrapper">
+            <canvas id="chart-scores-canvas"></canvas>
+          </div>
+        </div>
+        <div class="chart-box">
+          <h4>Daily Tasks Completion Rate</h4>
+          <div class="chart-canvas-wrapper">
+            <canvas id="chart-tasks-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Recent Sessions For This Patient -->
+      <div>
+        <h4 style="font-size:15px; font-weight:800; margin-bottom:10px; color:var(--brand-rose-dark);">Recent Game Attempts</h4>
+        <div id="chart-modal-history-list" class="history-list">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: GAME 1 - MEMORY MATCH -->
   <div id="modal-match-game" class="game-modal hidden">
     <div class="modal-card">
       <div class="modal-top">
         <div>
-          <span class="game-type-chip">Visual Memory Game</span>
+          <span class="game-type-chip" id="match-level-badge">Visual Memory Game • Level 1</span>
           <h3>Memory Match</h3>
           <p class="modal-instruction">Find the matching calm pairs. Take all the time you need.</p>
         </div>
@@ -450,22 +580,21 @@
       </div>
 
       <div class="game-stats-bar">
-        <span>Player: <strong id="match-player-label">Player</strong></span>
+        <span>Patient: <strong id="match-player-label">Patient</strong></span>
         <span>Moves: <strong id="match-moves-count">0</strong></span>
-        <span>Pairs Matched: <strong id="match-pairs-count">0</strong> / 6</span>
+        <span>Pairs: <strong id="match-pairs-count">0</strong> / <span id="match-pairs-target">4</span></span>
         <span>Timer: <strong id="match-timer">00:00</strong></span>
       </div>
 
-      <!-- 4x3 Grid (12 Cards / 6 Pairs) -->
       <div class="card-grid" id="match-board">
         <!-- Generated by JS -->
       </div>
 
-      <!-- Win Banner inside modal -->
+      <!-- Win Banner -->
       <div id="match-win-screen" class="win-screen hidden">
         <div class="win-celebration">🌺 Wonderful Job! 🌺</div>
         <p>You completed all pairs with high focus and patience.</p>
-        <div class="win-points-badge">+100 Points Earned!</div>
+        <div class="win-points-badge" id="match-win-points-badge">+100 Points Earned!</div>
         <button class="primary-play-btn" onclick="finishAndSaveGame('match')">Save & Return to My Day</button>
       </div>
     </div>
@@ -476,7 +605,7 @@
     <div class="modal-card">
       <div class="modal-top">
         <div>
-          <span class="game-type-chip">Sequential Recall Game</span>
+          <span class="game-type-chip" id="seq-level-badge">Sequential Recall • Level 1</span>
           <h3>Remember the Order</h3>
           <p class="modal-instruction" id="seq-instruction">Watch the glowing blossoms, then repeat the pattern.</p>
         </div>
@@ -484,12 +613,11 @@
       </div>
 
       <div class="game-stats-bar">
-        <span>Player: <strong id="seq-player-label">Player</strong></span>
-        <span>Current Round: <strong id="seq-round-count">1</strong> / 4</span>
+        <span>Patient: <strong id="seq-player-label">Patient</strong></span>
+        <span>Round: <strong id="seq-round-count">1</strong> / <span id="seq-round-target">3</span></span>
         <span>Timer: <strong id="seq-timer">00:00</strong></span>
       </div>
 
-      <!-- 4 Gentle Bells/Blossoms -->
       <div class="sequence-pads-container">
         <button class="seq-pad pad-rose" data-idx="0" onclick="handleSeqPadClick(0)">
           <span class="pad-emoji">🌸</span>
@@ -513,11 +641,11 @@
         <button class="primary-play-btn" id="start-seq-btn" onclick="startSequenceGame()">Start Gentle Round</button>
       </div>
 
-      <!-- Win Banner inside modal -->
+      <!-- Win Banner -->
       <div id="seq-win-screen" class="win-screen hidden">
         <div class="win-celebration">✨ Splendid Focus! ✨</div>
         <p>You followed each pattern with wonderful calm and attention.</p>
-        <div class="win-points-badge">+100 Points Earned!</div>
+        <div class="win-points-badge" id="seq-win-points-badge">+100 Points Earned!</div>
         <button class="primary-play-btn" onclick="finishAndSaveGame('sequence')">Save & Return to My Day</button>
       </div>
     </div>
