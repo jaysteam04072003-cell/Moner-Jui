@@ -9,8 +9,9 @@
  */
 
 // --- 1. SUPABASE CLIENT & CONFIGURATION ---
-const DEFAULT_SUPABASE_URL = "";      // Fill in or configure via UI Settings modal
-const DEFAULT_SUPABASE_ANON_KEY = ""; // Fill in or configure via UI Settings modal
+const DEFAULT_SUPABASE_URL = "https://gtiuqxuvbwfeqvcmqblu.supabase.co";
+const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd0aXVxeHV2YndmZXF2Y21xYmx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5MDcxNTIsImV4cCI6MjEwNzQ4MzE1Mn0.n0d2Ta3IlZBfyz3cW_vNkzbzgBKs6EFBOyMWpj63FZA";
+
 
 let supabaseClient = null;
 
