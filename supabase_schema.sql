@@ -1,9 +1,6 @@
 -- ==============================================================================
--- MONER-JUI (মনের জুঁই) SUPABASE DATABASE SCHEMA
--- Run this script in your Supabase SQL Editor:
--- 1. Log in to https://supabase.com
--- 2. Open your Project -> Click on "SQL Editor" in the left sidebar
--- 3. Click "New Query", paste this entire code, and click "Run" (▶)
+-- MONER-JUI (মনের জুঁই) IDEMPOTENT SUPABASE SCHEMA
+-- Safe to run multiple times without "already exists" errors!
 -- ==============================================================================
 
 -- 1. Create the 'game_sessions' table
@@ -20,7 +17,7 @@ CREATE TABLE IF NOT EXISTS public.game_sessions (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Create the 'player_profiles' table (optional, stores total score & last active)
+-- 2. Create the 'player_profiles' table
 CREATE TABLE IF NOT EXISTS public.player_profiles (
     player_name TEXT PRIMARY KEY,
     avatar_initial TEXT,
@@ -30,7 +27,7 @@ CREATE TABLE IF NOT EXISTS public.player_profiles (
     notes TEXT DEFAULT 'Active participant'
 );
 
--- 3. Pre-seed default 4 profiles (Lakshmi Devi, Bimal Ghosh, Suniti Sen, Ananda Roy)
+-- 3. Seed default 4 profiles
 INSERT INTO public.player_profiles (player_name, avatar_initial, total_points, games_played, notes)
 VALUES 
     ('Lakshmi Devi', 'ल', 420, 4, 'Shows strong visual memory in flower matching'),
@@ -39,23 +36,27 @@ VALUES
     ('Ananda Roy', 'আ', 390, 4, 'Very consistent daily morning routine')
 ON CONFLICT (player_name) DO NOTHING;
 
--- 4. Enable Row Level Security (RLS) but allow public read & insert so friends can play without passwords
+-- 4. Enable Row Level Security (RLS)
 ALTER TABLE public.game_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.player_profiles ENABLE ROW LEVEL SECURITY;
 
--- Allow anyone to read game records (Host & Dashboard)
+-- Drop existing policies if they already exist (so it won't throw Error 42710)
+DROP POLICY IF EXISTS "Allow public read access on game_sessions" ON public.game_sessions;
+DROP POLICY IF EXISTS "Allow public insert on game_sessions" ON public.game_sessions;
+DROP POLICY IF EXISTS "Allow public read access on player_profiles" ON public.player_profiles;
+DROP POLICY IF EXISTS "Allow public insert/update on player_profiles" ON public.player_profiles;
+
+-- Recreate policies cleanly
 CREATE POLICY "Allow public read access on game_sessions" 
 ON public.game_sessions FOR SELECT 
 TO anon, authenticated
 USING (true);
 
--- Allow players to insert their completed game stats
 CREATE POLICY "Allow public insert on game_sessions" 
 ON public.game_sessions FOR INSERT 
 TO anon, authenticated 
 WITH CHECK (true);
 
--- Allow public read & upsert on player profiles
 CREATE POLICY "Allow public read access on player_profiles" 
 ON public.player_profiles FOR SELECT 
 TO anon, authenticated 
@@ -67,6 +68,20 @@ TO anon, authenticated
 USING (true)
 WITH CHECK (true);
 
--- 5. Enable real-time publication for live host dashboard updates
-ALTER PUBLICATION supabase_realtime ADD TABLE public.game_sessions;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.player_profiles;
+-- 5. Add to realtime publication safely
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'game_sessions'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.game_sessions;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'player_profiles'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.player_profiles;
+  END IF;
+END $$;
