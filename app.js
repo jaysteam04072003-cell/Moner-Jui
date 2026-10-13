@@ -1,17 +1,16 @@
 /**
- * MONER-JUI (মনের জুঁই) - Core Application Logic
- * Supports:
- * 1. Supabase Cloud Database Integration (with graceful offline/local fallback)
- * 2. 4 Default Friend Profiles with quick switcher
- * 3. Game 1: Memory Match (Elder-friendly card pairing)
- * 4. Game 2: Remember the Order (Calm sequential blossom recall)
- * 5. Host Real-time Monitoring Dashboard with stats, activity logs & completion badges
+ * MONER-JUI - Core Application Logic
+ * Clean Architecture:
+ * 1. Username & Password Authentication for Players and Host
+ * 2. Host Account: Abhishek Kawarkhe / Monerpass@123
+ * 3. Stats & Monitoring Dashboard strictly restricted to Host only
+ * 4. Automatic database sync to Supabase with local storage fallback
+ * 5. Dementia-Friendly Memory Match & Remember the Order Mini-Games
  */
 
 // --- 1. SUPABASE CLIENT & CONFIGURATION ---
 const DEFAULT_SUPABASE_URL = "https://gtiuqxuvbwfeqvcmqblu.supabase.co";
 const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd0aXVxeHV2YndmZXF2Y21xYmx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5MDcxNTIsImV4cCI6MjEwNzQ4MzE1Mn0.n0d2Ta3IlZBfyz3cW_vNkzbzgBKs6EFBOyMWpj63FZA";
-
 
 let supabaseClient = null;
 
@@ -19,23 +18,15 @@ let supabaseClient = null;
 let supabaseUrl = localStorage.getItem("monerjui_sb_url") || DEFAULT_SUPABASE_URL;
 let supabaseAnonKey = localStorage.getItem("monerjui_sb_key") || DEFAULT_SUPABASE_ANON_KEY;
 
-// 4 Initial Friends
-const INITIAL_FRIENDS = [
-  { name: "Lakshmi Devi", initial: "L", points: 420, completedToday: true, notes: "Visual Memory Focus" },
-  { name: "Bimal Ghosh", initial: "B", points: 350, completedToday: true, notes: "Pattern & Audio Focus" },
-  { name: "Suniti Sen", initial: "S", points: 280, completedToday: false, notes: "Gentle Pace Preferred" },
-  { name: "Ananda Roy", initial: "A", points: 390, completedToday: true, notes: "Morning Routine Regular" }
-];
+// Host Credentials
+const HOST_USERNAME = "Abhishek Kawarkhe";
+const HOST_PASSWORD = "Monerpass@123";
 
-// Persistent Host PIN (default 1234)
-let hostPin = localStorage.getItem("monerjui_host_pin") || "1234";
+// Current Active Session
+let currentUser = JSON.parse(localStorage.getItem("monerjui_active_user")) || null; // { username, fullName, role, points }
+let isHostLoggedIn = localStorage.getItem("monerjui_is_host_logged_in") === "true";
 
-// Current Active Player & Role
-let savedPlayers = JSON.parse(localStorage.getItem("monerjui_players_list")) || INITIAL_FRIENDS;
-let currentPlayer = JSON.parse(localStorage.getItem("monerjui_active_player")) || null;
-let isHostMode = localStorage.getItem("monerjui_is_host") === "true";
-
-// Audio State (Web Audio API Synthesizer for gentle chimes)
+// Audio State (Web Audio API Synthesizer)
 let audioEnabled = true;
 let audioCtx = null;
 
@@ -46,7 +37,6 @@ function getAudioContext() {
   return audioCtx;
 }
 
-// Gentle Calming Sound Generator
 function playGentleChime(freq = 528, duration = 0.5) {
   if (!audioEnabled) return;
   try {
@@ -56,7 +46,7 @@ function playGentleChime(freq = 528, duration = 0.5) {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     
-    osc.type = 'sine'; // Pure soft sine wave
+    osc.type = 'sine';
     osc.frequency.setValueAtTime(freq, ctx.currentTime);
     
     gain.gain.setValueAtTime(0.01, ctx.currentTime);
@@ -77,55 +67,92 @@ function playGentleChime(freq = 528, duration = 0.5) {
 document.addEventListener("DOMContentLoaded", () => {
   initSupabase();
   setupDateDisplay();
-  populateLoginSelect();
   checkAuthSession();
-  loadLocalOrCloudStats();
-  
-  // Set up periodic dashboard refresh (every 10 seconds if on host tab)
+
+  // Periodic host sync every 10s if host dashboard is active
   setInterval(() => {
     const hostTab = document.getElementById("tab-host");
-    if (hostTab && hostTab.classList.contains("active")) {
+    if (isHostLoggedIn && hostTab && hostTab.classList.contains("active")) {
       refreshHostDashboard(true);
     }
   }, 10000);
 });
 
-// Check if user is already logged in
+function setupDateDisplay() {
+  const options = { weekday: 'long', month: 'long', day: 'numeric' };
+  const today = new Date().toLocaleDateString('en-US', options);
+  const dateEl = document.getElementById("current-date-display");
+  if (dateEl) dateEl.innerText = today;
+}
+
+function initSupabase() {
+  const statusBar = document.getElementById("db-status-bar");
+  const statusIndicator = document.getElementById("status-indicator");
+  const statusText = document.getElementById("status-text");
+
+  if (supabaseUrl && supabaseAnonKey && window.supabase) {
+    try {
+      supabaseClient = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+      if (statusBar) statusBar.classList.remove("hidden");
+      if (statusIndicator) statusIndicator.classList.add("connected");
+      if (statusText) statusText.innerText = "Connected to Supabase Cloud Database";
+      subscribeRealtime();
+    } catch (err) {
+      console.error("Supabase init error:", err);
+      showFallbackStatus();
+    }
+  } else {
+    showFallbackStatus();
+  }
+}
+
+function showFallbackStatus() {
+  const statusBar = document.getElementById("db-status-bar");
+  const statusIndicator = document.getElementById("status-indicator");
+  const statusText = document.getElementById("status-text");
+  if (statusBar) statusBar.classList.remove("hidden");
+  if (statusIndicator) statusIndicator.classList.remove("connected");
+  if (statusText) statusText.innerText = "Offline Mode (Local Storage Enabled)";
+}
+
+function subscribeRealtime() {
+  if (!supabaseClient) return;
+  try {
+    supabaseClient
+      .channel('public:game_sessions')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_sessions' }, (payload) => {
+        if (isHostLoggedIn) {
+          refreshHostDashboard(true);
+        }
+      })
+      .subscribe();
+  } catch (e) {
+    console.warn("Realtime subscription error:", e);
+  }
+}
+
+// --- 3. AUTHENTICATION & ACCESS CONTROL ---
 function checkAuthSession() {
   const overlay = document.getElementById("auth-overlay");
-  if (isHostMode) {
+  const hostNavBtn = document.getElementById("nav-btn-host");
+
+  if (isHostLoggedIn) {
     if (overlay) overlay.classList.add("hidden");
+    if (hostNavBtn) hostNavBtn.classList.remove("hidden");
+    updateHostUI();
     switchTab("tab-host");
-  } else if (currentPlayer && currentPlayer.name) {
+  } else if (currentUser && currentUser.username) {
     if (overlay) overlay.classList.add("hidden");
-    updateProfileUI();
+    if (hostNavBtn) hostNavBtn.classList.add("hidden");
+    updatePlayerUI();
+    switchTab("tab-home");
   } else {
+    // Show Login
     if (overlay) overlay.classList.remove("hidden");
+    if (hostNavBtn) hostNavBtn.classList.add("hidden");
   }
 }
 
-// Populate Login dropdown with registered players
-function populateLoginSelect() {
-  const select = document.getElementById("login-profile-select");
-  if (!select) return;
-  select.innerHTML = `<option value="">-- Choose from 4 Friends --</option>`;
-  savedPlayers.forEach(p => {
-    const opt = document.createElement("option");
-    opt.value = p.name;
-    opt.innerText = `${p.name} (${p.points || 0} pts)`;
-    select.appendChild(opt);
-  });
-}
-
-function onLoginSelectChange() {
-  const select = document.getElementById("login-profile-select");
-  const input = document.getElementById("login-name-input");
-  if (select && input && select.value) {
-    input.value = select.value;
-  }
-}
-
-// Switch between the 3 Auth Tabs (Sign In, New Registration, Host Login)
 function switchAuthTab(tab) {
   playGentleChime(440, 0.15);
   document.querySelectorAll(".auth-tab-btn").forEach(btn => btn.classList.remove("active"));
@@ -143,222 +170,224 @@ function switchAuthTab(tab) {
   }
 }
 
-// 1. Submit Sign In
-function submitPlayerSignIn() {
-  const select = document.getElementById("login-profile-select");
-  const input = document.getElementById("login-name-input");
-  const name = (input.value || select.value || "").trim();
+// 1. SIGN IN (PLAYER)
+async function submitPlayerSignIn() {
+  const username = (document.getElementById("login-username-input").value || "").trim();
+  const password = (document.getElementById("login-password-input").value || "").trim();
 
-  if (!name) {
-    alert("Please select or type your name.");
+  if (!username || !password) {
+    alert("Please enter both username and password.");
     return;
   }
 
-  let found = savedPlayers.find(p => p.name.toLowerCase() === name.toLowerCase());
-  if (!found) {
-    found = {
-      name: name,
-      initial: name.charAt(0).toUpperCase(),
-      points: 100,
-      completedToday: false,
-      notes: "Active Explorer"
-    };
-    savedPlayers.push(found);
-    localStorage.setItem("monerjui_players_list", JSON.stringify(savedPlayers));
+  let user = null;
+
+  // Verify against Supabase
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient
+        .from('users')
+        .select('*')
+        .ilike('username', username)
+        .eq('password', password)
+        .limit(1);
+
+      if (!error && data && data.length > 0) {
+        user = data[0];
+      }
+    } catch (err) {
+      console.warn("Supabase auth error:", err);
+    }
   }
 
-  currentPlayer = found;
-  isHostMode = false;
-  localStorage.setItem("monerjui_active_player", JSON.stringify(currentPlayer));
-  localStorage.setItem("monerjui_is_host", "false");
+  // Fallback to local storage
+  if (!user) {
+    const localUsers = JSON.parse(localStorage.getItem("monerjui_registered_users") || "[]");
+    user = localUsers.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
+  }
+
+  if (!user) {
+    alert("Invalid username or password. Please check your credentials or register a new account.");
+    return;
+  }
+
+  // Successful login
+  currentUser = {
+    username: user.username,
+    fullName: user.full_name || user.fullName || user.username,
+    role: "player",
+    points: user.total_points || 0
+  };
+  isHostLoggedIn = false;
+
+  localStorage.setItem("monerjui_active_user", JSON.stringify(currentUser));
+  localStorage.setItem("monerjui_is_host_logged_in", "false");
 
   document.getElementById("auth-overlay").classList.add("hidden");
-  updateProfileUI();
+  document.getElementById("nav-btn-host").classList.add("hidden");
+
+  updatePlayerUI();
   switchTab("tab-home");
   playGentleChime(528, 0.4);
 }
 
-// 2. Submit New Registration
-function submitPlayerRegistration() {
-  const nameInput = document.getElementById("reg-name-input");
-  const notesInput = document.getElementById("reg-notes-input");
-  const name = (nameInput.value || "").trim();
-  const notes = (notesInput.value || "New registered player").trim();
+// 2. NEW REGISTRATION (PLAYER)
+async function submitPlayerRegistration() {
+  const fullName = (document.getElementById("reg-fullname-input").value || "").trim();
+  const username = (document.getElementById("reg-username-input").value || "").trim();
+  const password = (document.getElementById("reg-password-input").value || "").trim();
 
-  if (!name) {
-    alert("Please enter a name for the new profile.");
+  if (!fullName || !username || !password) {
+    alert("Please fill in all fields (Full Name, Username, and Password).");
     return;
   }
 
-  const newPlayer = {
-    name: name,
-    initial: name.charAt(0).toUpperCase(),
-    points: 100,
-    completedToday: false,
-    notes: notes
+  // Check if username already exists in Supabase
+  if (supabaseClient) {
+    try {
+      const { data } = await supabaseClient
+        .from('users')
+        .select('username')
+        .ilike('username', username);
+
+      if (data && data.length > 0) {
+        alert("This username is already taken. Please choose another username.");
+        return;
+      }
+    } catch (err) {
+      console.warn("User existence check warning:", err);
+    }
+  }
+
+  // Save new user in Supabase
+  const newUserRecord = {
+    username: username,
+    password: password,
+    full_name: fullName,
+    role: "player",
+    total_points: 0,
+    games_played: 0,
+    notes: "Active Participant"
   };
 
-  savedPlayers.push(newPlayer);
-  localStorage.setItem("monerjui_players_list", JSON.stringify(savedPlayers));
-  populateLoginSelect();
+  if (supabaseClient) {
+    try {
+      await supabaseClient.from('users').insert([newUserRecord]);
+    } catch (err) {
+      console.warn("Supabase user insert fallback:", err);
+    }
+  }
 
-  currentPlayer = newPlayer;
-  isHostMode = false;
-  localStorage.setItem("monerjui_active_player", JSON.stringify(currentPlayer));
-  localStorage.setItem("monerjui_is_host", "false");
+  // Save locally
+  const localUsers = JSON.parse(localStorage.getItem("monerjui_registered_users") || "[]");
+  localUsers.push(newUserRecord);
+  localStorage.setItem("monerjui_registered_users", JSON.stringify(localUsers));
+
+  // Log in as the new user
+  currentUser = {
+    username: username,
+    fullName: fullName,
+    role: "player",
+    points: 0
+  };
+  isHostLoggedIn = false;
+
+  localStorage.setItem("monerjui_active_user", JSON.stringify(currentUser));
+  localStorage.setItem("monerjui_is_host_logged_in", "false");
 
   document.getElementById("auth-overlay").classList.add("hidden");
-  updateProfileUI();
+  document.getElementById("nav-btn-host").classList.add("hidden");
+
+  updatePlayerUI();
   switchTab("tab-home");
   playGentleChime(587, 0.4);
-
-  // Sync to Supabase if online
-  if (supabaseClient) {
-    supabaseClient.from('player_profiles').upsert([{
-      player_name: name,
-      avatar_initial: newPlayer.initial,
-      total_points: 100,
-      notes: notes
-    }]).then(() => {});
-  }
 }
 
-// 3. Submit Host Login
+// 3. HOST LOGIN (Abhishek Kawarkhe / Monerpass@123)
 function submitHostLogin() {
-  const pinInput = document.getElementById("host-pin-input");
-  const enteredPin = (pinInput.value || "").trim();
+  const username = (document.getElementById("host-name-input").value || "").trim();
+  const password = (document.getElementById("host-pass-input").value || "").trim();
 
-  if (enteredPin !== hostPin) {
-    alert("Invalid Host Access PIN. (Default is 1234)");
+  if (username !== HOST_USERNAME || password !== HOST_PASSWORD) {
+    alert("Invalid Host credentials! Access restricted to Host Abhishek Kawarkhe.");
     return;
   }
 
-  isHostMode = true;
-  localStorage.setItem("monerjui_is_host", "true");
-  document.getElementById("auth-overlay").classList.add("hidden");
+  isHostLoggedIn = true;
+  currentUser = {
+    username: HOST_USERNAME,
+    fullName: HOST_USERNAME,
+    role: "host",
+    points: 0
+  };
 
-  playGentleChime(659, 0.4);
+  localStorage.setItem("monerjui_is_host_logged_in", "true");
+  localStorage.setItem("monerjui_active_user", JSON.stringify(currentUser));
+
+  document.getElementById("auth-overlay").classList.add("hidden");
+  document.getElementById("nav-btn-host").classList.remove("hidden");
+
+  updateHostUI();
   switchTab("tab-host");
+  playGentleChime(659, 0.4);
   refreshHostDashboard();
 }
 
-// Logout / Return to Auth Screen
-function logoutToAuthScreen() {
+function logoutSession() {
+  isHostLoggedIn = false;
+  currentUser = null;
+  localStorage.removeItem("monerjui_active_user");
+  localStorage.setItem("monerjui_is_host_logged_in", "false");
+
   document.getElementById("auth-overlay").classList.remove("hidden");
-  populateLoginSelect();
+  document.getElementById("nav-btn-host").classList.add("hidden");
 }
 
-// Setup Friendly Date
-function setupDateDisplay() {
-  const options = { weekday: 'long', month: 'long', day: 'numeric' };
-  const today = new Date().toLocaleDateString('en-US', options);
-  const dateEl = document.getElementById("current-date-display");
-  if (dateEl) dateEl.innerText = today;
+// --- 4. UI UPDATES ---
+function updatePlayerUI() {
+  if (!currentUser) return;
+
+  const initial = currentUser.fullName.charAt(0).toUpperCase();
+  document.getElementById("sidebar-user-avatar").innerText = initial;
+  document.getElementById("sidebar-role-badge").innerText = "Player";
+  document.getElementById("sidebar-user-name").innerText = currentUser.fullName;
+
+  document.getElementById("main-greeting").innerText = `Good morning, ${currentUser.fullName}`;
+  document.getElementById("sub-greeting").innerText = "May your day be peaceful, calm, and filled with gentle smiles.";
+
+  document.getElementById("header-points-display").innerText = currentUser.points || 0;
+  document.getElementById("card-points-display").innerText = currentUser.points || 0;
+
+  // Profile Tab
+  const pAvatar = document.getElementById("profile-big-avatar");
+  if (pAvatar) pAvatar.innerText = initial;
+  const pHero = document.getElementById("profile-hero-name");
+  if (pHero) pHero.innerText = currentUser.fullName;
+  const pPts = document.getElementById("profile-total-points");
+  if (pPts) pPts.innerText = currentUser.points || 0;
+
+  loadPlayerHistory();
 }
 
-// Connect to Supabase
-function initSupabase() {
-  const statusBar = document.getElementById("db-status-bar");
-  const statusIndicator = document.getElementById("status-indicator");
-  const statusText = document.getElementById("status-text");
+function updateHostUI() {
+  document.getElementById("sidebar-user-avatar").innerText = "👑";
+  document.getElementById("sidebar-role-badge").innerText = "Host Administrator";
+  document.getElementById("sidebar-user-name").innerText = HOST_USERNAME;
 
-  if (supabaseUrl && supabaseAnonKey && window.supabase) {
-    try {
-      supabaseClient = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
-      if (statusBar) statusBar.classList.remove("hidden");
-      if (statusIndicator) statusIndicator.classList.add("connected");
-      if (statusText) statusText.innerText = "Connected to Supabase Cloud Database";
-
-      // Listen to real-time additions if host tab is open
-      subscribeRealtime();
-    } catch (err) {
-      console.error("Supabase init error:", err);
-      showFallbackStatus();
-    }
-  } else {
-    // Show configuration hint
-    if (statusBar) statusBar.classList.remove("hidden");
-    if (statusIndicator) statusIndicator.classList.remove("connected");
-    if (statusText) statusText.innerText = "Running in Local Storage Mode (Click Settings to link Supabase)";
-  }
+  document.getElementById("main-greeting").innerText = `Welcome, Host Abhishek Kawarkhe`;
+  document.getElementById("sub-greeting").innerText = "Live caregiver monitoring and participant statistics.";
 }
-
-function showFallbackStatus() {
-  const statusBar = document.getElementById("db-status-bar");
-  const statusIndicator = document.getElementById("status-indicator");
-  const statusText = document.getElementById("status-text");
-  if (statusBar) statusBar.classList.remove("hidden");
-  if (statusIndicator) statusIndicator.classList.remove("connected");
-  if (statusText) statusText.innerText = "Offline Mode (Local Storage Enabled)";
-}
-
-// Subscribe to Supabase Real-time updates
-function subscribeRealtime() {
-  if (!supabaseClient) return;
-  try {
-    supabaseClient
-      .channel('public:game_sessions')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_sessions' }, (payload) => {
-        console.log("New game session received in real-time!", payload);
-        refreshHostDashboard(true);
-      })
-      .subscribe();
-  } catch (e) {
-    console.warn("Real-time subscription error:", e);
-  }
-}
-
-// --- 3. PROFILE & UI SWITCHING ---
-function updateProfileUI() {
-  if (!currentPlayer) return;
-
-  const avatar = document.getElementById("sidebar-user-avatar");
-  if (avatar) avatar.innerText = currentPlayer.initial || currentPlayer.name.charAt(0);
-  
-  const nameEl = document.getElementById("sidebar-user-name");
-  if (nameEl) nameEl.innerText = currentPlayer.name;
-  
-  const greetingEl = document.getElementById("main-greeting");
-  if (greetingEl) {
-    greetingEl.innerText = `Good morning, ${currentPlayer.name}`;
-  }
-
-  const subGreetingEl = document.getElementById("sub-greeting");
-  if (subGreetingEl) {
-    subGreetingEl.innerText = "May your day be peaceful, calm, and filled with gentle smiles.";
-  }
-
-  const headerPts = document.getElementById("header-points-display");
-  if (headerPts) headerPts.innerText = currentPlayer.points || 0;
-
-  const cardPts = document.getElementById("card-points-display");
-  if (cardPts) cardPts.innerText = currentPlayer.points || 0;
-
-  // Profile tab fields
-  const bigAvatar = document.getElementById("profile-big-avatar");
-  if (bigAvatar) bigAvatar.innerText = currentPlayer.initial || currentPlayer.name.charAt(0);
-  
-  const heroName = document.getElementById("profile-hero-name");
-  if (heroName) heroName.innerText = currentPlayer.name;
-  
-  const totPts = document.getElementById("profile-total-points");
-  if (totPts) totPts.innerText = currentPlayer.points || 0;
-
-  // Progress Bar
-  const fill = document.getElementById("rewards-bar-fill");
-  if (fill) {
-    const pct = Math.min(100, Math.floor(((currentPlayer.points || 0) % 500) / 5));
-    fill.style.width = `${pct}%`;
-  }
-
-  localStorage.setItem("monerjui_active_player", JSON.stringify(currentPlayer));
-}
-
 
 function switchTab(tabId) {
+  // If player tries to access host tab directly, block it
+  if (tabId === "tab-host" && !isHostLoggedIn) {
+    alert("Access Denied: The Host Dashboard is restricted to Host Abhishek Kawarkhe.");
+    return;
+  }
+
   playGentleChime(440, 0.2);
   document.querySelectorAll(".tab-pane").forEach(pane => pane.classList.remove("active"));
-  document.querySelectorAll(".nav-item").forEach(item => item.classList.remove("active"));
+  document.querySelectorAll(".nav-menu .nav-item").forEach(item => item.classList.remove("active"));
 
   const targetPane = document.getElementById(tabId);
   if (targetPane) targetPane.classList.add("active");
@@ -373,64 +402,7 @@ function switchTab(tabId) {
   }
 }
 
-// Modal open/close
-function openProfileSelector() {
-  document.getElementById("modal-select-profile").classList.remove("hidden");
-}
-function closeProfileSelector() {
-  document.getElementById("modal-select-profile").classList.add("hidden");
-}
-
-function renderProfilePicker() {
-  const container = document.getElementById("picker-list");
-  if (!container) return;
-  container.innerHTML = "";
-
-  INITIAL_FRIENDS.forEach(friend => {
-    const row = document.createElement("div");
-    row.className = "picker-row";
-    row.onclick = () => selectPlayer(friend);
-    row.innerHTML = `
-      <div class="picker-initial">${friend.initial}</div>
-      <div>
-        <strong>${friend.name}</strong>
-        <p style="font-size:12px; color:#5E7A6B;">${friend.points} points • ${friend.notes}</p>
-      </div>
-    `;
-    container.appendChild(row);
-  });
-}
-
-function selectPlayer(player) {
-  currentPlayer = player;
-  updateProfileUI();
-  closeProfileSelector();
-  playGentleChime(528, 0.3);
-}
-
-function chooseCustomPlayer() {
-  const input = document.getElementById("custom-name-input");
-  const name = (input.value || "").trim();
-  if (!name) return;
-
-  const newPlayer = {
-    name: name,
-    initial: name.charAt(0).toUpperCase(),
-    points: 100,
-    completedToday: false,
-    notes: "Active Explorer"
-  };
-
-  currentPlayer = newPlayer;
-  INITIAL_FRIENDS.push(newPlayer);
-  updateProfileUI();
-  renderProfilePicker();
-  closeProfileSelector();
-  input.value = "";
-  playGentleChime(587, 0.4);
-}
-
-// --- 4. GAME 1: MEMORY MATCH ---
+// --- 5. GAME 1: MEMORY MATCH ---
 const NATURE_ICONS = ["🌺", "🌸", "🌿", "🕊️", "☀️", "🌼"];
 let matchCards = [];
 let flippedCards = [];
@@ -466,12 +438,11 @@ function startMemoryMatch() {
   matchSeconds = 0;
   flippedCards = [];
 
-  document.getElementById("match-player-label").innerText = currentPlayer.name;
+  document.getElementById("match-player-label").innerText = currentUser ? currentUser.fullName : "Player";
   document.getElementById("match-moves-count").innerText = "0";
   document.getElementById("match-pairs-count").innerText = "0";
   document.getElementById("match-timer").innerText = "00:00";
 
-  // Double cards to make pairs & shuffle
   matchCards = [...NATURE_ICONS, ...NATURE_ICONS].sort(() => 0.5 - Math.random());
 
   matchCards.forEach((icon, idx) => {
@@ -479,7 +450,7 @@ function startMemoryMatch() {
     card.className = "match-card";
     card.dataset.index = idx;
     card.dataset.icon = icon;
-    card.innerText = "🌱"; // Covered state
+    card.innerText = "🌱";
     card.onclick = () => handleCardClick(card);
     board.appendChild(card);
   });
@@ -509,9 +480,8 @@ function handleCardClick(card) {
 
     const [first, second] = flippedCards;
     if (first.dataset.icon === second.dataset.icon) {
-      // MATCH FOUND!
       setTimeout(() => {
-        playGentleChime(784, 0.35); // Pleasant higher chime
+        playGentleChime(784, 0.35);
         first.classList.add("matched");
         second.classList.add("matched");
         matchedPairs++;
@@ -523,7 +493,6 @@ function handleCardClick(card) {
         }
       }, 400);
     } else {
-      // NO MATCH: Gently flip back
       setTimeout(() => {
         first.classList.remove("flipped");
         second.classList.remove("flipped");
@@ -549,8 +518,8 @@ function handleMatchGameWon() {
   document.getElementById("badge-game1").classList.add("completed");
 }
 
-// --- 5. GAME 2: REMEMBER THE ORDER (SEQUENCE RECALL) ---
-const BLOSSOM_FREQS = [392, 440, 523, 587]; // G4, A4, C5, D5 soothing pentatonic notes
+// --- 6. GAME 2: REMEMBER THE ORDER ---
+const BLOSSOM_FREQS = [392, 440, 523, 587];
 let sequencePattern = [];
 let userSequence = [];
 let seqRound = 1;
@@ -560,7 +529,7 @@ let seqTimerInterval = null;
 let seqSeconds = 0;
 
 function prepareSequenceGame() {
-  document.getElementById("seq-player-label").innerText = currentPlayer.name;
+  document.getElementById("seq-player-label").innerText = currentUser ? currentUser.fullName : "Player";
   document.getElementById("seq-round-count").innerText = "1";
   document.getElementById("seq-timer").innerText = "00:00";
   document.getElementById("seq-win-screen").classList.add("hidden");
@@ -590,11 +559,7 @@ function nextSequenceRound() {
   userSequence = [];
   document.getElementById("seq-round-count").innerText = `${seqRound}`;
   document.getElementById("seq-instruction").innerText = `Listen and watch blossoms gently... (Round ${seqRound}/${MAX_ROUNDS})`;
-
-  // Add 1 random flower to pattern
   sequencePattern.push(Math.floor(Math.random() * 4));
-
-  // Play sequence to player
   playFullSequence();
 }
 
@@ -632,9 +597,7 @@ function handleSeqPadClick(padIdx) {
   userSequence.push(padIdx);
 
   const curStep = userSequence.length - 1;
-
   if (userSequence[curStep] !== sequencePattern[curStep]) {
-    // Gentle mistake prompt without harsh buzzers
     document.getElementById("seq-instruction").innerText = "Let's try that sequence again softly!";
     playGentleChime(330, 0.4);
     setTimeout(() => {
@@ -644,7 +607,6 @@ function handleSeqPadClick(padIdx) {
     return;
   }
 
-  // Round succeeded
   if (userSequence.length === sequencePattern.length) {
     if (seqRound >= MAX_ROUNDS) {
       handleSeqGameWon();
@@ -670,7 +632,7 @@ function handleSeqGameWon() {
   document.getElementById("badge-game2").classList.add("completed");
 }
 
-// --- 6. DATA PERSISTENCE (SAVE TO SUPABASE OR LOCAL STORAGE) ---
+// --- 7. PERSISTENCE & DATA SAVING ---
 async function finishAndSaveGame(gameType) {
   const isMatch = gameType === 'match';
   const gameId = isMatch ? "memory-match" : "remember-order";
@@ -679,13 +641,15 @@ async function finishAndSaveGame(gameType) {
   const moves = isMatch ? matchMoves : sequencePattern.length * 2;
   const points = 100;
 
-  // Update current player points locally
-  currentPlayer.points = (currentPlayer.points || 0) + points;
-  updateProfileUI();
+  if (currentUser) {
+    currentUser.points = (currentUser.points || 0) + points;
+    localStorage.setItem("monerjui_active_user", JSON.stringify(currentUser));
+    updatePlayerUI();
+  }
 
-  // Save session record
   const sessionData = {
-    player_name: currentPlayer.name,
+    username: currentUser ? currentUser.username : "Guest",
+    player_name: currentUser ? currentUser.fullName : "Guest Player",
     game_id: gameId,
     game_title: gameTitle,
     points_earned: points,
@@ -696,22 +660,24 @@ async function finishAndSaveGame(gameType) {
     created_at: new Date().toISOString()
   };
 
-  // 1. Save to Supabase (if configured)
+  // 1. Supabase Cloud insert
   if (supabaseClient) {
     try {
-      const { error } = await supabaseClient
-        .from('game_sessions')
-        .insert([sessionData]);
-      if (error) console.error("Supabase insert error:", error);
+      await supabaseClient.from('game_sessions').insert([sessionData]);
+      if (currentUser && currentUser.username) {
+        await supabaseClient.from('users').update({
+          total_points: currentUser.points,
+          games_played: 1
+        }).eq('username', currentUser.username);
+      }
     } catch (err) {
-      console.warn("Could not save to Supabase, falling back locally:", err);
+      console.warn("Error inserting to Supabase:", err);
     }
   }
 
-  // 2. Always maintain in local history array
+  // 2. Save locally
   saveSessionLocally(sessionData);
 
-  // Close modals
   closeGameModal(isMatch ? 'modal-match-game' : 'modal-sequence-game');
   switchTab('tab-home');
   loadPlayerHistory();
@@ -723,106 +689,118 @@ function saveSessionLocally(session) {
   localStorage.setItem("monerjui_history", JSON.stringify(localHistory));
 }
 
-// --- 7. HOST DASHBOARD LOGIC (AGGREGATE 4 FRIENDS) ---
+// --- 8. HOST DASHBOARD (RESTRICTED TO HOST ONLY) ---
 async function refreshHostDashboard(isSilent = false) {
+  if (!isHostLoggedIn) return; // Strict security check
+
   const tbody = document.getElementById("host-sessions-tbody");
   if (!isSilent && tbody) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center">Syncing real-time updates...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center">Syncing real-time updates from cloud...</td></tr>`;
   }
 
   let sessions = [];
+  let usersList = [];
 
-  // Try fetching from Supabase first
+  // Fetch live from Supabase
   if (supabaseClient) {
     try {
-      const { data, error } = await supabaseClient
-        .from('game_sessions')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(25);
+      const [sessRes, usersRes] = await Promise.all([
+        supabaseClient.from('game_sessions').select('*').order('created_at', { ascending: false }).limit(50),
+        supabaseClient.from('users').select('*').neq('role', 'host')
+      ]);
 
-      if (!error && data && data.length > 0) {
-        sessions = data;
+      if (!sessRes.error && sessRes.data) {
+        sessions = sessRes.data;
+      }
+      if (!usersRes.error && usersRes.data) {
+        usersList = usersRes.data;
       }
     } catch (err) {
-      console.warn("Supabase fetch failed, showing local records:", err);
+      console.warn("Supabase dashboard fetch warning:", err);
     }
   }
 
-  // Fallback to local storage if Supabase returned empty
+  // Fallbacks to local records
   if (sessions.length === 0) {
     sessions = JSON.parse(localStorage.getItem("monerjui_history") || "[]");
   }
-
-  // Seed sample demonstration sessions if totally empty
-  if (sessions.length === 0) {
-    sessions = [
-      { player_name: "Lakshmi Devi", game_title: "Memory Match", points_earned: 100, time_spent_seconds: 94, total_moves: 14, accuracy_percentage: 95.0, status: "completed", created_at: new Date(Date.now() - 3600000).toISOString() },
-      { player_name: "Bimal Ghosh", game_title: "Remember the Order", points_earned: 100, time_spent_seconds: 110, total_moves: 12, accuracy_percentage: 100.0, status: "completed", created_at: new Date(Date.now() - 7200000).toISOString() },
-      { player_name: "Ananda Roy", game_title: "Memory Match", points_earned: 100, time_spent_seconds: 88, total_moves: 12, accuracy_percentage: 100.0, status: "completed", created_at: new Date(Date.now() - 14400000).toISOString() }
-    ];
+  if (usersList.length === 0) {
+    const localRegistered = JSON.parse(localStorage.getItem("monerjui_registered_users") || "[]");
+    usersList = localRegistered.filter(u => u.role !== 'host');
   }
 
-  // Render Table
+  // Populate Table
   if (tbody) {
     tbody.innerHTML = "";
-    sessions.forEach(s => {
-      const row = document.createElement("tr");
-      const dateStr = new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const sec = s.time_spent_seconds || 0;
-      const timeFormatted = `${Math.floor(sec/60)}m ${sec%60}s`;
-      
-      row.innerHTML = `
-        <td>${dateStr}</td>
-        <td><strong>${escapeHtml(s.player_name)}</strong></td>
-        <td>${escapeHtml(s.game_title)}</td>
-        <td class="score-pill">+${s.points_earned} pts</td>
-        <td>${timeFormatted}</td>
-        <td>${s.total_moves} moves</td>
-        <td>${s.accuracy_percentage}%</td>
-        <td><span class="check-pill completed">${s.status || 'completed'}</span></td>
-      `;
-      tbody.appendChild(row);
-    });
+    if (sessions.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center" style="padding:24px; color:#5E7A6B;">No games played yet by registered friends. Awaiting their gentle play.</td></tr>`;
+    } else {
+      sessions.forEach(s => {
+        const row = document.createElement("tr");
+        const dateStr = new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const sec = s.time_spent_seconds || 0;
+        const timeFormatted = `${Math.floor(sec/60)}m ${sec%60}s`;
+        
+        row.innerHTML = `
+          <td>${dateStr}</td>
+          <td><strong>${escapeHtml(s.player_name || s.username)}</strong></td>
+          <td>${escapeHtml(s.game_title)}</td>
+          <td class="score-pill">+${s.points_earned} pts</td>
+          <td>${timeFormatted}</td>
+          <td>${s.total_moves} moves</td>
+          <td>${s.accuracy_percentage}%</td>
+          <td><span class="check-pill completed">${s.status || 'completed'}</span></td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
   }
 
   // Update Summary Metrics
-  const totalGames = sessions.length;
-  const combinedPoints = sessions.reduce((acc, curr) => acc + (curr.points_earned || 0), 0);
-  const metricGames = document.getElementById("metric-total-games");
-  const metricPoints = document.getElementById("metric-combined-points");
-  if (metricGames) metricGames.innerText = totalGames;
-  if (metricPoints) metricPoints.innerText = combinedPoints;
+  const activeCountEl = document.getElementById("metric-active-count");
+  const totalGamesEl = document.getElementById("metric-total-games");
+  const pointsEl = document.getElementById("metric-combined-points");
 
-  // Render 4 Friends Cards
-  renderHostPlayerCards(sessions);
+  if (activeCountEl) activeCountEl.innerText = usersList.length;
+  if (totalGamesEl) totalGamesEl.innerText = sessions.length;
+  if (pointsEl) {
+    const totalPts = sessions.reduce((sum, s) => sum + (s.points_earned || 0), 0);
+    pointsEl.innerText = totalPts;
+  }
+
+  renderHostPlayerCards(usersList, sessions);
 }
 
-function renderHostPlayerCards(recentSessions) {
+function renderHostPlayerCards(usersList, sessions) {
   const container = document.getElementById("host-players-grid");
   if (!container) return;
   container.innerHTML = "";
 
-  INITIAL_FRIENDS.forEach(friend => {
-    // Find player's sessions
-    const friendSessions = recentSessions.filter(s => s.player_name === friend.name);
-    const sessionCount = friendSessions.length;
-    const completedToday = sessionCount > 0 || friend.completedToday;
-    const pts = friend.points + (friendSessions.length * 100);
+  if (usersList.length === 0) {
+    container.innerHTML = `<div style="grid-column: 1 / -1; background:white; padding:24px; border-radius:18px; text-align:center; color:#5E7A6B; border:1px solid #E2ECE5;">No participants registered yet. When friends register with a username and password, their live cards will appear here.</div>`;
+    return;
+  }
+
+  usersList.forEach(user => {
+    const userSessions = sessions.filter(s => (s.username === user.username) || (s.player_name === user.full_name));
+    const completedCount = userSessions.length;
+    const completedToday = completedCount > 0;
+    const pts = userSessions.reduce((sum, s) => sum + (s.points_earned || 0), 0);
+    const initial = (user.full_name || user.username).charAt(0).toUpperCase();
 
     const card = document.createElement("div");
     card.className = "friend-status-card";
     card.innerHTML = `
       <div class="friend-card-top">
-        <div class="friend-avatar">${friend.initial}</div>
+        <div class="friend-avatar">${initial}</div>
         <div class="friend-name-col">
-          <strong>${friend.name}</strong>
-          <span>${friend.notes}</span>
+          <strong>${escapeHtml(user.full_name || user.username)}</strong>
+          <span>@${escapeHtml(user.username)}</span>
         </div>
       </div>
       <div class="friend-card-stats">
-        <span>Score: <strong>${pts} pts</strong></span>
-        <span>Sessions: <strong>${sessionCount}</strong></span>
+        <span>Points: <strong>${pts} pts</strong></span>
+        <span>Played: <strong>${completedCount}</strong></span>
       </div>
       <div class="friend-badge-status" style="background:${completedToday ? '#E8F5E9' : '#FFF3E0'}; color:${completedToday ? '#2E7D32' : '#E65100'};">
         ${completedToday ? 'Completed Today ✓' : 'Awaiting gentle play ⏳'}
@@ -834,13 +812,13 @@ function renderHostPlayerCards(recentSessions) {
 
 function loadPlayerHistory() {
   const container = document.getElementById("profile-history-list");
-  if (!container) return;
+  if (!container || !currentUser) return;
 
   const localHistory = JSON.parse(localStorage.getItem("monerjui_history") || "[]");
-  const playerHistory = localHistory.filter(s => s.player_name === currentPlayer.name);
+  const playerHistory = localHistory.filter(s => s.username === currentUser.username || s.player_name === currentUser.fullName);
 
   if (playerHistory.length === 0) {
-    container.innerHTML = `<div class="empty-state" style="padding:16px; color:#5E7A6B; font-size:14px;">No activities completed yet today. Play a memory game to light up this garden!</div>`;
+    container.innerHTML = `<div class="empty-state" style="padding:16px; color:#5E7A6B; font-size:14px;">No activities completed yet today. Play a memory game to record your journey!</div>`;
     return;
   }
 
@@ -858,19 +836,17 @@ function loadPlayerHistory() {
     `;
     container.appendChild(item);
   });
+
+  const totSessions = document.getElementById("profile-total-sessions");
+  if (totSessions) totSessions.innerText = playerHistory.length;
 }
 
-function loadLocalOrCloudStats() {
-  // Pre-load default state
-  refreshHostDashboard(true);
-}
-
-// --- 8. SOUND & SPEECH HELPERS ---
+// --- 9. HELPERS & MODALS ---
 function toggleAudioFx() {
   audioEnabled = !audioEnabled;
   const btn = document.getElementById("toggle-sound-btn");
   if (btn) {
-    btn.innerHTML = `<span id="sound-icon">${audioEnabled ? '🔊' : '🔇'}</span> Calming sound: ${audioEnabled ? 'On' : 'Muted'}`;
+    btn.innerHTML = `<span id="sound-icon">${audioEnabled ? '🔊' : '🔇'}</span> Calming Sound: ${audioEnabled ? 'On' : 'Muted'}`;
   }
 }
 
@@ -878,7 +854,7 @@ function speakMessage(text) {
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 0.85; // Calming, gentle pace for elders
+    utterance.rate = 0.85;
     utterance.pitch = 1.0;
     window.speechSynthesis.speak(utterance);
   } else {
@@ -886,7 +862,6 @@ function speakMessage(text) {
   }
 }
 
-// --- 9. CONFIG MODAL (SUPABASE KEYS) ---
 function openConfigModal() {
   document.getElementById("modal-config").classList.remove("hidden");
   const urlInput = document.getElementById("cfg-supabase-url");
@@ -915,7 +890,6 @@ function saveSupabaseConfig() {
   playGentleChime(528, 0.4);
 }
 
-// Security sanitization helper
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)

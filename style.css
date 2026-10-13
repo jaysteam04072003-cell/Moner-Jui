@@ -1320,8 +1320,25 @@ body {
   margin-bottom: 18px;
 }
 
+.auth-switch-note {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 14px;
+}
+.auth-switch-note a {
+  color: var(--brand-forest);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
 .auth-footer-note {
   margin-top: 24px;
   font-size: 12px;
   color: var(--text-muted);
 }
+
+.hidden {
+  display: none !important;
+}
+
