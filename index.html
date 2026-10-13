@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Moner-Jui (মনের জুঁই) | Gentle Memory Care</title>
+  <title>Moner-Jui | Gentle Memory Care</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Rozha+One&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <!-- Supabase JS Client (v2 CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -14,16 +14,95 @@
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </head>
 <body>
+
+  <!-- ================= AUTHENTICATION / LOGIN OVERLAY ================= -->
+  <div id="auth-overlay" class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="heart-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+          </svg>
+        </div>
+        <h2>Moner-Jui</h2>
+        <p class="auth-sub">Gentle Memory Care & Cognitive Wellbeing</p>
+      </div>
+
+      <!-- 3 Auth Tabs: Sign In, New Registration, Host Login -->
+      <div class="auth-tabs">
+        <button class="auth-tab-btn active" id="btn-tab-signin" onclick="switchAuthTab('signin')">Sign In</button>
+        <button class="auth-tab-btn" id="btn-tab-register" onclick="switchAuthTab('register')">New Registration</button>
+        <button class="auth-tab-btn" id="btn-tab-host" onclick="switchAuthTab('host')">Host Login 👑</button>
+      </div>
+
+      <!-- FORM 1: SIGN IN (PLAYER) -->
+      <div id="auth-panel-signin" class="auth-panel active">
+        <p class="auth-instruction">Welcome back! Please select your name or enter it below:</p>
+        
+        <div class="form-group">
+          <label>Select Saved Profile:</label>
+          <select id="login-profile-select" onchange="onLoginSelectChange()">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Or type your Name:</label>
+          <input type="text" id="login-name-input" placeholder="e.g. Lakshmi Devi" maxlength="30">
+        </div>
+
+        <button class="auth-submit-btn" onclick="submitPlayerSignIn()">Start Today's Activities &rarr;</button>
+      </div>
+
+      <!-- FORM 2: NEW REGISTRATION -->
+      <div id="auth-panel-register" class="auth-panel">
+        <p class="auth-instruction">Register a new player profile for gentle cognitive memory care:</p>
+        
+        <div class="form-group">
+          <label>Full Name:</label>
+          <input type="text" id="reg-name-input" placeholder="e.g. Suniti Sen" maxlength="30">
+        </div>
+
+        <div class="form-group">
+          <label>Care Notes or Preference (Optional):</label>
+          <input type="text" id="reg-notes-input" placeholder="e.g. Loves morning flower games" maxlength="60">
+        </div>
+
+        <button class="auth-submit-btn" onclick="submitPlayerRegistration()">Create Profile & Start &rarr;</button>
+      </div>
+
+      <!-- FORM 3: HOST LOGIN -->
+      <div id="auth-panel-host" class="auth-panel">
+        <p class="auth-instruction">Enter your Host / Caregiver access PIN to open the live statistics console:</p>
+        
+        <div class="form-group">
+          <label>Host Access PIN:</label>
+          <input type="password" id="host-pin-input" placeholder="Enter Host PIN (Default: 1234)" maxlength="10">
+        </div>
+
+        <p class="host-pin-hint">💡 <em>Default Host PIN is <strong>1234</strong> (can be changed in settings anytime).</em></p>
+
+        <button class="auth-submit-btn host-btn" onclick="submitHostLogin()">Open Host Dashboard 👑 &rarr;</button>
+      </div>
+
+      <div class="auth-footer-note">
+        <span>🌱 A calm, supportive environment for memory care. Take your time.</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Cloud Connection Banner / Config Notification -->
   <div id="db-status-bar" class="status-bar hidden">
     <div class="status-content">
       <span class="status-dot" id="status-indicator"></span>
-      <span id="status-text">Connecting to Cloud Database...</span>
+      <span id="status-text">Connected to Supabase Cloud Database</span>
       <button class="small-btn" onclick="openConfigModal()">Settings</button>
+      <button class="small-btn" onclick="logoutToAuthScreen()">Switch / Sign Out</button>
     </div>
   </div>
 
-  <div class="app-container">
+  <!-- MAIN APP CONTAINER -->
+  <div class="app-container" id="main-app-container">
     <!-- LEFT SIDEBAR -->
     <aside class="sidebar">
       <div class="brand">
@@ -33,18 +112,18 @@
           </svg>
         </div>
         <div class="brand-text">
-          <span class="brand-title">moner-jui</span>
-          <span class="brand-sub">মনের জুঁই • memory care</span>
+          <span class="brand-title">Moner-Jui</span>
+          <span class="brand-sub">Memory Care & Wellbeing</span>
         </div>
       </div>
 
       <!-- Current Active User Mini Card -->
-      <div class="current-user-badge" onclick="openProfileSelector()">
-        <div class="user-avatar" id="sidebar-user-avatar">ल</div>
+      <div class="current-user-badge" onclick="logoutToAuthScreen()">
+        <div class="user-avatar" id="sidebar-user-avatar">L</div>
         <div class="user-meta">
-          <span class="greeting-tiny">Good morning</span>
+          <span class="greeting-tiny">Signed in as</span>
           <strong id="sidebar-user-name">Lakshmi Devi</strong>
-          <span class="switch-hint">Tap to switch player ▾</span>
+          <span class="switch-hint">Switch Account ▾</span>
         </div>
       </div>
 
@@ -52,15 +131,15 @@
       <nav class="nav-menu">
         <button class="nav-item active" data-tab="tab-home" onclick="switchTab('tab-home')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-          <span>My day</span>
+          <span>My Day</span>
         </button>
         <button class="nav-item" data-tab="tab-games" onclick="switchTab('tab-games')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="6"></rect><path d="M12 12h.01"></path><path d="M17 12h.01"></path><path d="M7 12h.01"></path></svg>
-          <span>Memory games</span>
+          <span>Memory Games</span>
         </button>
         <button class="nav-item" data-tab="tab-profile" onclick="switchTab('tab-profile')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-          <span>My profile</span>
+          <span>My Profile</span>
         </button>
         <button class="nav-item host-nav-pill" data-tab="tab-host" onclick="switchTab('tab-host')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
@@ -70,7 +149,7 @@
 
       <div class="sidebar-footer">
         <button class="calm-sound-btn" id="toggle-sound-btn" onclick="toggleAudioFx()">
-          <span id="sound-icon">🔊</span> Calming sound: On
+          <span id="sound-icon">🔊</span> Calming Sound: On
         </button>
       </div>
     </aside>
@@ -81,8 +160,8 @@
       <header class="top-header">
         <div>
           <div class="header-date" id="current-date-display">Wednesday, October 16</div>
-          <h1 class="header-greeting" id="main-greeting">नमस्ते, लक्ष्मीदेवी</h1>
-          <p class="header-sub-bengali" id="sub-greeting">আজকের দিনটি আপনার জন্য সুন্দর ও শান্তিময় হোক।</p>
+          <h1 class="header-greeting" id="main-greeting">Good morning, Lakshmi Devi</h1>
+          <p class="header-sub-bengali" id="sub-greeting">May your day be peaceful, calm, and filled with gentle smiles.</p>
         </div>
 
         <div class="header-right">
@@ -101,7 +180,7 @@
           <div class="banner-text">
             <span class="banner-sub">Your gentle plan for today</span>
             <h2 class="banner-title">Small steps make a good day.</h2>
-            <p class="banner-note">Take your time. You're doing beautifully.</p>
+            <p class="banner-note">Take your time. You are doing beautifully.</p>
           </div>
           <div class="banner-sun-illustration">
             <div class="sun-orbit"></div>
@@ -111,7 +190,7 @@
 
         <!-- Today's memory games card row -->
         <div class="section-title-row">
-          <h3 class="section-heading">Today's memory games</h3>
+          <h3 class="section-heading">Today's Memory Games</h3>
           <button class="link-btn" onclick="switchTab('tab-games')">See all &rarr;</button>
         </div>
 
@@ -166,7 +245,7 @@
               <span class="care-tag">YOUR CARE PLAN</span>
               <button class="edit-link" onclick="speakMessage('Don\'t forget your gentle morning walk and a glass of warm water.')">🔊 Read aloud</button>
             </div>
-            <h4 class="care-title">Medication & Hydration</h4>
+            <h4 class="care-title">Daily Wellness Routine</h4>
             <div class="routine-item">
               <span class="routine-icon">💧</span>
               <div>
@@ -179,7 +258,7 @@
               <span class="routine-icon">🌿</span>
               <div>
                 <strong>Gentle Morning Breathwork</strong>
-                <p>5 minutes in the garden balcony</p>
+                <p>5 minutes in the garden or balcony</p>
               </div>
               <span class="done-check">✓</span>
             </div>
@@ -239,17 +318,17 @@
       <section id="tab-profile" class="tab-pane">
         <div class="profile-page-wrapper">
           <div class="profile-hero">
-            <div class="big-avatar" id="profile-big-avatar">ल</div>
+            <div class="big-avatar" id="profile-big-avatar">L</div>
             <div class="profile-hero-info">
               <h2 id="profile-hero-name">Lakshmi Devi</h2>
               <p>Participant in Moner-Jui Memory Care Program</p>
               <div class="profile-badges-row">
                 <span class="badge-pill">🌸 Peaceful Mind</span>
                 <span class="badge-pill">⭐ Daily Explorer</span>
-                <span class="badge-pill">🌼 4-Day Streak</span>
+                <span class="badge-pill">🌼 Consistent Streak</span>
               </div>
             </div>
-            <button class="outline-btn" onclick="openProfileSelector()">Change Player</button>
+            <button class="outline-btn" onclick="logoutToAuthScreen()">Switch Player</button>
           </div>
 
           <div class="stats-overview-grid">
@@ -287,11 +366,12 @@
             <div>
               <span class="host-tag">ADMIN & CAREGIVER CONSOLE</span>
               <h2>Host Live Monitoring Dashboard</h2>
-              <p>Real-time progress, completion stats, and scores from all 4 friends across the world.</p>
+              <p>Real-time progress, completion stats, and scores from all 4 friends across devices.</p>
             </div>
             <div class="host-actions">
               <button class="sync-btn" onclick="refreshHostDashboard()">🔄 Refresh Live Data</button>
               <button class="config-btn" onclick="openConfigModal()">⚙️ Supabase Settings</button>
+              <button class="config-btn" onclick="logoutToAuthScreen()">Sign Out</button>
             </div>
           </div>
 
@@ -323,7 +403,7 @@
           <!-- Live Feed / Session History Table -->
           <div class="live-table-container">
             <div class="table-header-title">
-              <h3>Live Game Logs (Cloud Synced)</h3>
+              <h3>Live Game Logs (Supabase Cloud Synced)</h3>
               <span class="live-pulse">🟢 Live Feed Active</span>
             </div>
             <table class="styled-table">
@@ -355,7 +435,7 @@
       <div class="modal-top">
         <div>
           <span class="game-type-chip">Visual Memory Game</span>
-          <h3>Memory Match (ফুলের সন্ধান)</h3>
+          <h3>Memory Match</h3>
           <p class="modal-instruction">Find the matching calm pairs. Take all the time you need.</p>
         </div>
         <button class="close-modal-btn" onclick="closeGameModal('modal-match-game')">✕ Close</button>
@@ -389,7 +469,7 @@
       <div class="modal-top">
         <div>
           <span class="game-type-chip">Sequential Recall Game</span>
-          <h3>Remember the Order (স্মৃতি ধারা)</h3>
+          <h3>Remember the Order</h3>
           <p class="modal-instruction" id="seq-instruction">Watch the glowing blossoms, then repeat the pattern.</p>
         </div>
         <button class="close-modal-btn" onclick="closeGameModal('modal-sequence-game')">✕ Close</button>
@@ -435,29 +515,6 @@
     </div>
   </div>
 
-  <!-- MODAL: PROFILE SELECTOR (FOR YOUR 4 FRIENDS) -->
-  <div id="modal-select-profile" class="game-modal hidden">
-    <div class="modal-card small-modal">
-      <div class="modal-top">
-        <h3>Who is playing today?</h3>
-        <button class="close-modal-btn" onclick="closeProfileSelector()">✕</button>
-      </div>
-      <p class="modal-instruction">Select your name to load your personal memory garden:</p>
-      
-      <div class="friends-picker-list" id="picker-list">
-        <!-- 4 Profiles populated dynamically -->
-      </div>
-
-      <div class="custom-profile-input-box">
-        <label>Or enter a new name:</label>
-        <div class="input-inline">
-          <input type="text" id="custom-name-input" placeholder="e.g. Rahul Sen" maxlength="25">
-          <button class="primary-play-btn" onclick="chooseCustomPlayer()">Join</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- MODAL: SUPABASE CONFIGURATION -->
   <div id="modal-config" class="game-modal hidden">
     <div class="modal-card small-modal">
@@ -465,7 +522,7 @@
         <h3>Supabase Cloud Connection</h3>
         <button class="close-modal-btn" onclick="closeConfigModal()">✕</button>
       </div>
-      <p class="modal-instruction">Enter your project credentials from your Supabase dashboard (Project Settings &rarr; API):</p>
+      <p class="modal-instruction">Your connected Supabase credentials:</p>
       
       <div class="form-group">
         <label>Project URL:</label>
@@ -475,9 +532,12 @@
         <label>Anon Public Key:</label>
         <textarea id="cfg-supabase-key" rows="3" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."></textarea>
       </div>
-      <p class="config-help">💡 <em>Note: If you leave these empty, the app will run locally and store data in your browser's local memory.</em></p>
+      <div class="form-group">
+        <label>Host Access PIN:</label>
+        <input type="password" id="cfg-host-pin" placeholder="1234">
+      </div>
       <div class="modal-buttons">
-        <button class="primary-play-btn" onclick="saveSupabaseConfig()">Connect Database</button>
+        <button class="primary-play-btn" onclick="saveSupabaseConfig()">Save Settings</button>
       </div>
     </div>
   </div>

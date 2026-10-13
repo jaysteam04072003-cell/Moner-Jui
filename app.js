@@ -21,14 +21,19 @@ let supabaseAnonKey = localStorage.getItem("monerjui_sb_key") || DEFAULT_SUPABAS
 
 // 4 Initial Friends
 const INITIAL_FRIENDS = [
-  { name: "Lakshmi Devi", initial: "ल", points: 420, completedToday: true, notes: "Visual Memory Focus" },
-  { name: "Bimal Ghosh", initial: "বি", points: 350, completedToday: true, notes: "Pattern & Audio Focus" },
-  { name: "Suniti Sen", initial: "সু", points: 280, completedToday: false, notes: "Gentle Pace Preferred" },
-  { name: "Ananda Roy", initial: "আ", points: 390, completedToday: true, notes: "Morning Routine Regular" }
+  { name: "Lakshmi Devi", initial: "L", points: 420, completedToday: true, notes: "Visual Memory Focus" },
+  { name: "Bimal Ghosh", initial: "B", points: 350, completedToday: true, notes: "Pattern & Audio Focus" },
+  { name: "Suniti Sen", initial: "S", points: 280, completedToday: false, notes: "Gentle Pace Preferred" },
+  { name: "Ananda Roy", initial: "A", points: 390, completedToday: true, notes: "Morning Routine Regular" }
 ];
 
-// Current Active Player
-let currentPlayer = JSON.parse(localStorage.getItem("monerjui_active_player")) || INITIAL_FRIENDS[0];
+// Persistent Host PIN (default 1234)
+let hostPin = localStorage.getItem("monerjui_host_pin") || "1234";
+
+// Current Active Player & Role
+let savedPlayers = JSON.parse(localStorage.getItem("monerjui_players_list")) || INITIAL_FRIENDS;
+let currentPlayer = JSON.parse(localStorage.getItem("monerjui_active_player")) || null;
+let isHostMode = localStorage.getItem("monerjui_is_host") === "true";
 
 // Audio State (Web Audio API Synthesizer for gentle chimes)
 let audioEnabled = true;
@@ -72,8 +77,8 @@ function playGentleChime(freq = 528, duration = 0.5) {
 document.addEventListener("DOMContentLoaded", () => {
   initSupabase();
   setupDateDisplay();
-  updateProfileUI();
-  renderProfilePicker();
+  populateLoginSelect();
+  checkAuthSession();
   loadLocalOrCloudStats();
   
   // Set up periodic dashboard refresh (every 10 seconds if on host tab)
@@ -84,6 +89,164 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }, 10000);
 });
+
+// Check if user is already logged in
+function checkAuthSession() {
+  const overlay = document.getElementById("auth-overlay");
+  if (isHostMode) {
+    if (overlay) overlay.classList.add("hidden");
+    switchTab("tab-host");
+  } else if (currentPlayer && currentPlayer.name) {
+    if (overlay) overlay.classList.add("hidden");
+    updateProfileUI();
+  } else {
+    if (overlay) overlay.classList.remove("hidden");
+  }
+}
+
+// Populate Login dropdown with registered players
+function populateLoginSelect() {
+  const select = document.getElementById("login-profile-select");
+  if (!select) return;
+  select.innerHTML = `<option value="">-- Choose from 4 Friends --</option>`;
+  savedPlayers.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.name;
+    opt.innerText = `${p.name} (${p.points || 0} pts)`;
+    select.appendChild(opt);
+  });
+}
+
+function onLoginSelectChange() {
+  const select = document.getElementById("login-profile-select");
+  const input = document.getElementById("login-name-input");
+  if (select && input && select.value) {
+    input.value = select.value;
+  }
+}
+
+// Switch between the 3 Auth Tabs (Sign In, New Registration, Host Login)
+function switchAuthTab(tab) {
+  playGentleChime(440, 0.15);
+  document.querySelectorAll(".auth-tab-btn").forEach(btn => btn.classList.remove("active"));
+  document.querySelectorAll(".auth-panel").forEach(panel => panel.classList.remove("active"));
+
+  if (tab === 'signin') {
+    document.getElementById("btn-tab-signin").classList.add("active");
+    document.getElementById("auth-panel-signin").classList.add("active");
+  } else if (tab === 'register') {
+    document.getElementById("btn-tab-register").classList.add("active");
+    document.getElementById("auth-panel-register").classList.add("active");
+  } else if (tab === 'host') {
+    document.getElementById("btn-tab-host").classList.add("active");
+    document.getElementById("auth-panel-host").classList.add("active");
+  }
+}
+
+// 1. Submit Sign In
+function submitPlayerSignIn() {
+  const select = document.getElementById("login-profile-select");
+  const input = document.getElementById("login-name-input");
+  const name = (input.value || select.value || "").trim();
+
+  if (!name) {
+    alert("Please select or type your name.");
+    return;
+  }
+
+  let found = savedPlayers.find(p => p.name.toLowerCase() === name.toLowerCase());
+  if (!found) {
+    found = {
+      name: name,
+      initial: name.charAt(0).toUpperCase(),
+      points: 100,
+      completedToday: false,
+      notes: "Active Explorer"
+    };
+    savedPlayers.push(found);
+    localStorage.setItem("monerjui_players_list", JSON.stringify(savedPlayers));
+  }
+
+  currentPlayer = found;
+  isHostMode = false;
+  localStorage.setItem("monerjui_active_player", JSON.stringify(currentPlayer));
+  localStorage.setItem("monerjui_is_host", "false");
+
+  document.getElementById("auth-overlay").classList.add("hidden");
+  updateProfileUI();
+  switchTab("tab-home");
+  playGentleChime(528, 0.4);
+}
+
+// 2. Submit New Registration
+function submitPlayerRegistration() {
+  const nameInput = document.getElementById("reg-name-input");
+  const notesInput = document.getElementById("reg-notes-input");
+  const name = (nameInput.value || "").trim();
+  const notes = (notesInput.value || "New registered player").trim();
+
+  if (!name) {
+    alert("Please enter a name for the new profile.");
+    return;
+  }
+
+  const newPlayer = {
+    name: name,
+    initial: name.charAt(0).toUpperCase(),
+    points: 100,
+    completedToday: false,
+    notes: notes
+  };
+
+  savedPlayers.push(newPlayer);
+  localStorage.setItem("monerjui_players_list", JSON.stringify(savedPlayers));
+  populateLoginSelect();
+
+  currentPlayer = newPlayer;
+  isHostMode = false;
+  localStorage.setItem("monerjui_active_player", JSON.stringify(currentPlayer));
+  localStorage.setItem("monerjui_is_host", "false");
+
+  document.getElementById("auth-overlay").classList.add("hidden");
+  updateProfileUI();
+  switchTab("tab-home");
+  playGentleChime(587, 0.4);
+
+  // Sync to Supabase if online
+  if (supabaseClient) {
+    supabaseClient.from('player_profiles').upsert([{
+      player_name: name,
+      avatar_initial: newPlayer.initial,
+      total_points: 100,
+      notes: notes
+    }]).then(() => {});
+  }
+}
+
+// 3. Submit Host Login
+function submitHostLogin() {
+  const pinInput = document.getElementById("host-pin-input");
+  const enteredPin = (pinInput.value || "").trim();
+
+  if (enteredPin !== hostPin) {
+    alert("Invalid Host Access PIN. (Default is 1234)");
+    return;
+  }
+
+  isHostMode = true;
+  localStorage.setItem("monerjui_is_host", "true");
+  document.getElementById("auth-overlay").classList.add("hidden");
+
+  playGentleChime(659, 0.4);
+  switchTab("tab-host");
+  refreshHostDashboard();
+}
+
+// Logout / Return to Auth Screen
+function logoutToAuthScreen() {
+  document.getElementById("auth-overlay").classList.remove("hidden");
+  populateLoginSelect();
+}
 
 // Setup Friendly Date
 function setupDateDisplay() {
@@ -147,26 +310,37 @@ function subscribeRealtime() {
 
 // --- 3. PROFILE & UI SWITCHING ---
 function updateProfileUI() {
-  document.getElementById("sidebar-user-avatar").innerText = currentPlayer.initial;
-  document.getElementById("sidebar-user-name").innerText = currentPlayer.name;
+  if (!currentPlayer) return;
+
+  const avatar = document.getElementById("sidebar-user-avatar");
+  if (avatar) avatar.innerText = currentPlayer.initial || currentPlayer.name.charAt(0);
+  
+  const nameEl = document.getElementById("sidebar-user-name");
+  if (nameEl) nameEl.innerText = currentPlayer.name;
   
   const greetingEl = document.getElementById("main-greeting");
   if (greetingEl) {
-    if (currentPlayer.name === "Lakshmi Devi") {
-      greetingEl.innerText = "नमस्ते, लक्ष्मीदेवी";
-    } else {
-      greetingEl.innerText = `Welcome, ${currentPlayer.name}`;
-    }
+    greetingEl.innerText = `Good morning, ${currentPlayer.name}`;
   }
 
-  document.getElementById("header-points-display").innerText = currentPlayer.points || 0;
-  document.getElementById("card-points-display").innerText = currentPlayer.points || 0;
+  const subGreetingEl = document.getElementById("sub-greeting");
+  if (subGreetingEl) {
+    subGreetingEl.innerText = "May your day be peaceful, calm, and filled with gentle smiles.";
+  }
+
+  const headerPts = document.getElementById("header-points-display");
+  if (headerPts) headerPts.innerText = currentPlayer.points || 0;
+
+  const cardPts = document.getElementById("card-points-display");
+  if (cardPts) cardPts.innerText = currentPlayer.points || 0;
 
   // Profile tab fields
   const bigAvatar = document.getElementById("profile-big-avatar");
-  if (bigAvatar) bigAvatar.innerText = currentPlayer.initial;
+  if (bigAvatar) bigAvatar.innerText = currentPlayer.initial || currentPlayer.name.charAt(0);
+  
   const heroName = document.getElementById("profile-hero-name");
   if (heroName) heroName.innerText = currentPlayer.name;
+  
   const totPts = document.getElementById("profile-total-points");
   if (totPts) totPts.innerText = currentPlayer.points || 0;
 
@@ -179,6 +353,7 @@ function updateProfileUI() {
 
   localStorage.setItem("monerjui_active_player", JSON.stringify(currentPlayer));
 }
+
 
 function switchTab(tabId) {
   playGentleChime(440, 0.2);
