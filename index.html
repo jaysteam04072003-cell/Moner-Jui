@@ -499,7 +499,10 @@
           <div class="live-table-container">
             <div class="table-header-title">
               <h3>Live Game Logs (Cloud Synced)</h3>
-              <span class="live-pulse">🟢 Live Feed Active</span>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <span class="live-pulse">🟢 Live Feed Active</span>
+                <button class="small-btn delete-btn-pill" onclick="clearAllGameLogs()">🗑️ Clear Old Logs</button>
+              </div>
             </div>
             <table class="styled-table">
               <thead>

@@ -66,21 +66,33 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.game_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_tasks ENABLE ROW LEVEL SECURITY;
 
+-- Ensure username column exists in game_sessions
+ALTER TABLE public.game_sessions ADD COLUMN IF NOT EXISTS username TEXT;
+
 -- Clean existing policies
 DROP POLICY IF EXISTS "Allow public read access on users" ON public.users;
 DROP POLICY IF EXISTS "Allow public insert on users" ON public.users;
 DROP POLICY IF EXISTS "Allow public update on users" ON public.users;
+DROP POLICY IF EXISTS "Allow public delete on users" ON public.users;
+
 DROP POLICY IF EXISTS "Allow public read access on game_sessions" ON public.game_sessions;
 DROP POLICY IF EXISTS "Allow public insert on game_sessions" ON public.game_sessions;
+DROP POLICY IF EXISTS "Allow public delete on game_sessions" ON public.game_sessions;
+
 DROP POLICY IF EXISTS "Allow public all on daily_tasks" ON public.daily_tasks;
 
+-- Policies on users
 CREATE POLICY "Allow public read access on users" ON public.users FOR SELECT TO anon, authenticated USING (true);
 CREATE POLICY "Allow public insert on users" ON public.users FOR INSERT TO anon, authenticated WITH CHECK (true);
 CREATE POLICY "Allow public update on users" ON public.users FOR UPDATE TO anon, authenticated USING (true);
+CREATE POLICY "Allow public delete on users" ON public.users FOR DELETE TO anon, authenticated USING (true);
 
+-- Policies on game_sessions
 CREATE POLICY "Allow public read access on game_sessions" ON public.game_sessions FOR SELECT TO anon, authenticated USING (true);
 CREATE POLICY "Allow public insert on game_sessions" ON public.game_sessions FOR INSERT TO anon, authenticated WITH CHECK (true);
+CREATE POLICY "Allow public delete on game_sessions" ON public.game_sessions FOR DELETE TO anon, authenticated USING (true);
 
+-- Policies on daily_tasks
 CREATE POLICY "Allow public all on daily_tasks" ON public.daily_tasks FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 -- 6. Realtime publication

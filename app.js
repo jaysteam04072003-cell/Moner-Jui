@@ -885,7 +885,16 @@ async function finishAndSaveGame(gameType) {
   // 1. Supabase Cloud insert
   if (supabaseClient) {
     try {
-      await supabaseClient.from('game_sessions').insert([sessionData]);
+      // First try inserting with all fields
+      const { error: insErr } = await supabaseClient.from('game_sessions').insert([sessionData]);
+      
+      // If schema doesn't have username column, fallback to insert without username
+      if (insErr && insErr.message && insErr.message.includes("username")) {
+        const fallbackData = { ...sessionData };
+        delete fallbackData.username;
+        await supabaseClient.from('game_sessions').insert([fallbackData]);
+      }
+
       if (currentUser && currentUser.username) {
         await supabaseClient.from('users').update({
           total_points: currentUser.points,
@@ -987,6 +996,10 @@ async function refreshHostDashboard(isSilent = false) {
     tasksEl.innerText = completedTasks;
   }
 
+  lastLoadedUsersList = usersList;
+  lastLoadedSessions = sessions;
+  lastLoadedTasksList = tasksList;
+
   renderHostPlayerCards(usersList, sessions, tasksList);
 }
 
@@ -1012,26 +1025,95 @@ function renderHostPlayerCards(usersList, sessions, tasksList) {
 
     const card = document.createElement("div");
     card.className = "friend-status-card";
-    card.onclick = () => openPatientChartsModal(user, userSessions, tasksList);
     card.innerHTML = `
-      <div class="friend-card-top">
+      <div class="friend-card-top" onclick="openPatientChartsModalByName('${escapeHtml(user.username)}')">
         <div class="friend-avatar">${initial}</div>
         <div class="friend-name-col">
           <strong>${escapeHtml(user.full_name || user.username)}</strong>
-          <span>${escapeHtml(user.age || '65 yrs')} • ${escapeHtml(user.dementia_stage || 'Early Stage')}</span>
+          <span>@${escapeHtml(user.username)} • ${escapeHtml(user.age || '65 yrs')}</span>
         </div>
       </div>
-      <div class="friend-card-stats">
+      <div class="friend-card-stats" onclick="openPatientChartsModalByName('${escapeHtml(user.username)}')">
         <span>Score: <strong>${pts} pts</strong></span>
         <span>Tasks: <strong>${userTasksToday.length}/8 Done</strong></span>
       </div>
-      <div class="friend-badge-status" style="background:${completedCount > 0 ? '#FFF1F5' : '#FFF9F0'}; color:${completedCount > 0 ? '#B32856' : '#C27A23'};">
+      <div class="friend-badge-status" onclick="openPatientChartsModalByName('${escapeHtml(user.username)}')" style="background:${completedCount > 0 ? '#FFF1F5' : '#FFF9F0'}; color:${completedCount > 0 ? '#B32856' : '#C27A23'};">
         ${completedCount > 0 ? 'Played Today ✓' : 'Awaiting activity ⏳'}
       </div>
-      <div class="click-graph-hint">📊 Click to view Statistical Graphs</div>
+      <div class="friend-card-actions">
+        <button class="card-action-btn" onclick="openPatientChartsModalByName('${escapeHtml(user.username)}')">📊 View Stats</button>
+        <button class="card-action-btn card-delete-btn" onclick="deletePatientProfile('${escapeHtml(user.username)}', '${escapeHtml(user.full_name || user.username)}')">🗑️ Delete</button>
+      </div>
     `;
     container.appendChild(card);
   });
+}
+
+// Global cached variables for modal opening
+let lastLoadedUsersList = [];
+let lastLoadedSessions = [];
+let lastLoadedTasksList = [];
+
+function openPatientChartsModalByName(username) {
+  const user = lastLoadedUsersList.find(u => u.username === username);
+  if (!user) return;
+  const userSessions = lastLoadedSessions.filter(s => (s.username === user.username) || (s.player_name === user.full_name));
+  openPatientChartsModal(user, userSessions, lastLoadedTasksList);
+}
+
+// Delete Patient Profile & Username
+async function deletePatientProfile(username, fullName) {
+  if (!confirm(`Are you sure you want to permanently delete patient "${fullName}" (@${username})? This will remove their profile and free up database space.`)) {
+    return;
+  }
+
+  playGentleChime(440, 0.2);
+
+  // 1. Delete from Supabase
+  if (supabaseClient) {
+    try {
+      await Promise.all([
+        supabaseClient.from('users').delete().eq('username', username),
+        supabaseClient.from('game_sessions').delete().or(`username.eq.${username},player_name.eq.${fullName}`),
+        supabaseClient.from('daily_tasks').delete().eq('username', username)
+      ]);
+    } catch (err) {
+      console.warn("Supabase deletion notice:", err);
+    }
+  }
+
+  // 2. Delete from local storage
+  let localUsers = JSON.parse(localStorage.getItem("monerjui_registered_users") || "[]");
+  localUsers = localUsers.filter(u => u.username !== username);
+  localStorage.setItem("monerjui_registered_users", JSON.stringify(localUsers));
+
+  let localHistory = JSON.parse(localStorage.getItem("monerjui_history") || "[]");
+  localHistory = localHistory.filter(s => s.username !== username && s.player_name !== fullName);
+  localStorage.setItem("monerjui_history", JSON.stringify(localHistory));
+
+  alert(`Patient profile "${fullName}" has been deleted successfully.`);
+  refreshHostDashboard();
+}
+
+// Clear All Old Game Logs
+async function clearAllGameLogs() {
+  if (!confirm("Are you sure you want to clear old game session logs? This will clean up the log table and free up storage.")) {
+    return;
+  }
+
+  playGentleChime(440, 0.2);
+
+  if (supabaseClient) {
+    try {
+      await supabaseClient.from('game_sessions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    } catch (err) {
+      console.warn("Supabase logs clear notice:", err);
+    }
+  }
+
+  localStorage.removeItem("monerjui_history");
+  alert("Old game logs have been cleared successfully.");
+  refreshHostDashboard();
 }
 
 // Open Patient Statistical Graphs Modal
